@@ -1,0 +1,21 @@
+.paraphrasing-text {
+    margin-bottom: 50px;
+    margin-top: 50px;
+    font-size: 1rem;
+    font-weight: bold;
+    color: darkred;
+    text-align: center;
+    animation: pulseGlow 1.6s ease-in-out infinite;
+  }
+  
+  @keyframes pulseGlow {
+    0% {
+      text-shadow: 0 0 4px darkred;
+    }
+    50% {
+      text-shadow: 0 0 20px red;
+    }
+    100% {
+      text-shadow: 0 0 4px darkred;
+    }
+  }

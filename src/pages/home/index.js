@@ -11,6 +11,8 @@ const HomePage = () => {
     const [url, setUrl] = useState(null)
     const [fetchingScrape, setFetchingScrape] = useState(false)
     const [scrapedContent, setScrapedContent] = useState(null)
+    const [showParaphrasing, setShowParaphrasing] = useState(false)
+
 
     const handleNewsURL = (event) => {
         console.log("event", event.target.value)
@@ -21,6 +23,11 @@ const HomePage = () => {
         setFetchingScrape(false)
         setUrl("")
         setScrapedContent(null)
+        setShowParaphrasing(false)
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth',
+        });
     }
 
     useEffect(() => {
@@ -34,6 +41,15 @@ const HomePage = () => {
                 if (result.success) {
                     setScrapedContent(result.content);
                     setFetchingScrape(false)
+
+                    setShowParaphrasing(true);
+
+                    setTimeout(() => {
+                        window.scrollTo({
+                            top: 700,
+                            behavior: 'smooth',
+                        });
+                    }, 200);
                 } else {
                     setScrapedContent(`Error: ${result.error}`);
                     setFetchingScrape(false);
@@ -50,20 +66,24 @@ const HomePage = () => {
     }, [url])
     return (
         <ContentContainer
-            title="home"
-            description="start creating now, enter a URL..."
+            title="Video Bastard"
+            description="automagically convert a news story into new content"
         >
-            <button onClick={handleClear}>clear</button>
+
             <LinkInput
                 placeholder="paste news URL here"
                 onChange={handleNewsURL}
                 name="news_url"
                 disabled={fetchingScrape}
                 value={url}
+                clearItem={handleClear}
             />
 
             {fetchingScrape && <BeatLoader />}
             {scrapedContent && <TextPreview content={scrapedContent} />}
+            {showParaphrasing && (
+                <p className="paraphrasing-text">paraphrasing new script...</p>
+            )}
 
         </ContentContainer>
     )

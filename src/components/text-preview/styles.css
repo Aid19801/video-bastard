@@ -3,10 +3,13 @@
     max-height: 8.5em; /* ~8 lines depending on font */
     overflow: hidden;
     position: relative;
-    padding-right: 1rem;
     font-size: 0.9rem;
     line-height: 1.25em;
     color: #333;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    flex-direction: column;
   }
   
   .textPreview-paragraph {

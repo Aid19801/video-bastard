@@ -1,10 +1,56 @@
-.linkInput {
-    width: 500px;
-    border-radius: 12px;
-    background: lightgrey;
-    font-size: 15px;
+.linkInputContainer {
+    display: flex;
+    width: 50%;
+    align-items: center;
+    position: relative;
+    transition: all 0.3s ease;
+    margin-bottom: 50px;
+  }
+  
+  .linkInput {
+    flex: 1;
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    transition: all 0.3s ease;
     border: 0px;
-    height: 31px;
-    margin-top: 20px;
-    padding-left: 8px;
-}
+    background: grey;
+    color: lightgrey;
+  }
+  
+  .linkInput::placeholder {
+    color: white;
+  }
+  /* When there's a clear button, shift the input left a bit */
+  .linkInputContainer.has-clear .linkInput {
+    padding-right: 4rem; /* Make room for button */
+  }
+  
+  /* Button styling */
+  .clearButton {
+    position: absolute;
+    right: 0.5rem;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.85rem;
+    background-color: orange;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+    animation: bounceUp 0.4s ease-out;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  @keyframes bounceUp {
+    0% {
+      opacity: 0;
+      transform: translateY(10px) scale(0.9);
+    }
+    50% {
+      opacity: 1;
+      transform: translateY(-3px) scale(1.02);
+    }
+    100% {
+      transform: translateY(0) scale(1);
+    }
+  }
+  
