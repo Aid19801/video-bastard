@@ -1,0 +1,26 @@
+.textPreview {
+    margin-top: 20px;  
+    max-height: 8.5em; /* ~8 lines depending on font */
+    overflow: hidden;
+    position: relative;
+    padding-right: 1rem;
+    font-size: 0.9rem;
+    line-height: 1.25em;
+    color: #333;
+  }
+  
+  .textPreview-paragraph {
+    margin: 0 0 1em;
+  }
+  
+  .textPreview-fade {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3em;
+    width: 100%;
+    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,1));
+    pointer-events: none;
+  }
+  

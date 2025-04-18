@@ -1,0 +1,30 @@
+.nav {
+    background-color: white;
+    padding: 1rem 2rem;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  }
+  
+  .nav-list {
+    list-style: none;
+    display: flex;
+    gap: 1.5rem;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .nav-item a {
+    text-decoration: none;
+    color: lightgrey;
+    font-weight: 500;
+    transition: color 0.3s ease;
+  }
+  
+  .nav-item a:hover {
+    color: orange;
+  }
+  
+  .nav-item.active a {
+    color: orange;
+    border-bottom: 2px solid grey;
+  }
+  
