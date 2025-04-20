@@ -1,7 +1,11 @@
+require('dotenv').config();
+
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fetch = require('node-fetch');
 const cheerio = require('cheerio');
+const { generateSatiricalVersion } = require('./paraphrase');
+const { generateAvatar } = require('./generate-avatar');
 
 function createWindow() {
     const win = new BrowserWindow({
@@ -47,6 +51,16 @@ ipcMain.handle('scrape-url', async (event, url) => {
     } catch (error) {
         return { success: false, error: error.message };
     }
+});
+
+ipcMain.handle('generate-avatar', async (event, text) => {
+    const result = await generateAvatar(text)
+    return result
+});
+
+ipcMain.handle("loaded-original-article", async (event, scrapedContent) => {
+    const result = await generateSatiricalVersion(scrapedContent);
+    return result;
 });
 
 app.on('window-all-closed', () => {

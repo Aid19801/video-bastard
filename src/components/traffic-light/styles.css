@@ -1,0 +1,27 @@
+.trafficLightsContainer {
+    display: flex;
+    flex-direction: column;
+    width: 240px;
+
+}
+
+.trafficLightsContainer > div {
+    justify-content: flex-end;
+    margin-bottom: 10px;
+}
+
+
+.trafficLight {
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    background-color: grey;
+    border: 0px;
+    margin-left: 20px;
+}
+
+.trafficLightsContainer > div > p.status {
+    font-family: monospace;
+    color: grey;
+    margin: 0;
+}
