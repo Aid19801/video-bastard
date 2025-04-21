@@ -23,6 +23,8 @@ const HomePage = () => {
     const [paraphrasedArticleFromGPT, setParaphrasedArticleFromGPT] = useState(null)
     const [avatarFromDID, setAvatarFromDID] = useState(null)
     const [localError, setError] = useState(null)
+    const [isGPT, setIsGPT] = useState(false)
+
     const handleNewsURL = (event) => {
         setUrl(event.target.value)
     }
@@ -46,7 +48,11 @@ const HomePage = () => {
             const cachedArticle = cachedRaw ? JSON.parse(cachedRaw) : null;
 
             if (!cachedArticle) {
-                const result = await window.electron.invoke("loaded-original-article", articleText);
+
+                const result = await window.electron.invoke("article-paraphraser", {
+                    content: articleText,
+                    isGPT,
+                });
                 if (result && result.success) {
                     console.log("✅ Paraphrased content:", result.content.slice(0, 300) + "...");
                     localStorage.setItem("cached_article", JSON.stringify(result));
@@ -131,6 +137,23 @@ const HomePage = () => {
             description="automagically convert a news story into new content"
         >
 
+            <select
+                onChange={(e) => setIsGPT(e.target.value === "GPT")}
+                value={isGPT === true ? "GPT" : "OLLAMA"}
+                style={{
+                    marginBottom: 32,
+                    width: 169,
+                    borderRadius: 12,
+                    padding: `5px 20px`,
+                    fontFamily: `monospace`,
+                    background: `grey`,
+                    color: `lightgrey`,
+                }}
+            >
+                <option value="GPT">GPT (OpenAI)</option>
+                <option value="OLLAMA">LLaMA (Local)</option>
+            </select>
+
             <LinkInput
                 placeholder="paste news URL here"
                 onChange={handleNewsURL}
@@ -150,14 +173,18 @@ const HomePage = () => {
                 />
             )}
 
-            <p style={{ marginBottom: -5, color: "orange" }}>Original: </p>
-            {scrapedContent && <TextPreview content={scrapedContent} />}
+            {scrapedContent && (
+                <>
+                    <p style={{ marginBottom: -5, color: "orange" }}>Original: </p>
+                    <TextPreview content={scrapedContent} />
+                </>
+            )}
 
-            <p style={{ fontWeight: 800, marginBottom: -5, color: "darkgreen" }}>Your Version: </p>
             {paraphrasedArticleFromGPT && (
-                <TextPreview
-                    content={paraphrasedArticleFromGPT}
-                />
+                <>
+                    <p style={{ fontWeight: 800, marginBottom: -5, color: "darkgreen" }}>Your Version: </p>
+                    <TextPreview content={paraphrasedArticleFromGPT} />
+                </>
             )}
 
             {avatarFromDID && (

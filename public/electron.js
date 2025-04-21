@@ -31,7 +31,7 @@ function createWindow() {
 
 app.whenReady().then(createWindow);
 
-// 🔥 Scrape Handler
+// 🗞️ Scrape It
 ipcMain.handle('scrape-url', async (event, url) => {
     try {
         const response = await fetch(url);
@@ -53,16 +53,28 @@ ipcMain.handle('scrape-url', async (event, url) => {
     }
 });
 
+// 📝 Re-Write It
+ipcMain.handle("article-paraphraser", async (event, { content, isGPT }) => {
+
+    console.log("content: ", content)
+    console.log("isGPT: ", isGPT)
+
+    let result
+    if (isGPT) {
+        console.log("isGPT true so generating now")
+        result = await generateSatiricalVersion(content);
+    } else {
+        console.log("isGPT false so Ollama now")
+        result = await generateSatiricalVersionOllama(content);
+    }
+    console.log("result back says ", result)
+    return result;
+});
+
+// 👤 Generate The Avatar To Say it
 ipcMain.handle('generate-avatar', async (event, text) => {
     const result = await generateAvatar(text)
     return result
-});
-
-ipcMain.handle("loaded-original-article", async (event, scrapedContent) => {
-    // const result = await generateSatiricalVersion(scrapedContent);
-    const result = await generateSatiricalVersionOllama(scrapedContent);
-    console.log("====== 2", result)
-    return result;
 });
 
 app.on('window-all-closed', () => {
