@@ -3,7 +3,7 @@ import "./styles.css"
 
 export function TrafficLight({
     scrapedContent,
-    audioGenerated,
+    avatarGenerated,
     paraphrasedArticle
 }) {
     return (
@@ -18,7 +18,7 @@ export function TrafficLight({
             </div>
             <div className="flex-row">
                 <p className="status">audio generated: </p>
-                <span className="trafficLight" style={{ background: audioGenerated ? "green" : "grey" }} />
+                <span className="trafficLight" style={{ background: avatarGenerated ? "green" : "grey" }} />
             </div>
         </div>
     )

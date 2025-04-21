@@ -1,19 +1,28 @@
-import React, { cache, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import ContentContainer from "../../components/content-container"
 import LinkInput from "../../components/input"
 import ParaphrasedArticle from "../../components/paraphrased-article"
 import { BeatLoader } from 'react-spinners'
 import TextPreview from '../../components/text-preview'
 import "./styles.css"
-import TrafficLight from '../../components/traffic-light'
+import TrafficLights from '../../components/traffic-light'
+
+
+// FLOW:
+// 1. fetchParaphrasedFromGPT()
+// 2. set that in state, triggers effect/dependency
+// 3. if it exists (paraphrasedArticleFromGPT) get avatar from cache
+// 4. if that doesnt exist, fetchAvatarFromDID()
+// 5. if [state] avatar exists, render the video
 
 const HomePage = () => {
 
     const [url, setUrl] = useState(null)
     const [fetchingScrape, setFetchingScrape] = useState(false)
     const [scrapedContent, setScrapedContent] = useState(null)
-    const [paraphrasedArticle, setParaphrasedArticle] = useState(null)
-    const [avatar, setAvatar] = useState(null)
+    const [paraphrasedArticleFromGPT, setParaphrasedArticleFromGPT] = useState(null)
+    const [avatarFromDID, setAvatarFromDID] = useState(null)
+    const [localError, setError] = useState(null)
     const handleNewsURL = (event) => {
         setUrl(event.target.value)
     }
@@ -22,50 +31,52 @@ const HomePage = () => {
         setFetchingScrape(false)
         setUrl("")
         setScrapedContent(null)
-        setParaphrasedArticle(null)
-        setAvatar(null)
+        setParaphrasedArticleFromGPT(null)
+        setAvatarFromDID(null)
+        setError(null)
         window.scrollTo({
             top: 0,
             behavior: 'smooth',
         });
     }
 
-    const fetchParaphrased = async (articleText) => {
+    const fetchParaphrasedFromGPT = async (articleText) => {
         try {
             const cachedRaw = localStorage.getItem("cached_article");
             const cachedArticle = cachedRaw ? JSON.parse(cachedRaw) : null;
 
             if (!cachedArticle) {
                 const result = await window.electron.invoke("loaded-original-article", articleText);
-                if (result.success) {
+                if (result && result.success) {
                     console.log("✅ Paraphrased content:", result.content.slice(0, 300) + "...");
                     localStorage.setItem("cached_article", JSON.stringify(result));
-                    setParaphrasedArticle(result.content)
+                    setParaphrasedArticleFromGPT(result.content)
                 } else {
-                    console.error("❌ Failed to paraphrase:", result.error);
+                    console.log("❌ GPT: Failed to paraphrase:", result.response);
+                    setError(`❌ GPT: ${result.response}`)
                 }
             } else {
-                console.log("🟠 retrieved cached paraphrased content:", cachedArticle.content.slice(0, 300) + "...");
-                setParaphrasedArticle(cachedArticle.content)
-                setTimeout(() => {
-                }, 100)
+                console.log("✅ GPT: retrieved cached paraphrased content:", cachedArticle.content.slice(0, 300) + "...");
+                setParaphrasedArticleFromGPT(cachedArticle.content)
             }
         } catch (err) {
+            setError(`❌ GPT: ${err.toString()}`)
             console.error("Unexpected error during paraphrasing:", err);
         }
     };
 
-    const createAvatar = async (text) => {
-        console.log("4. calling electron window electron invoke generate-avatar...")
+    const fetchAvatarFromDID = async (text) => {
+        console.log("passing to node for generate-avatar...")
         const result = await window.electron.invoke("generate-avatar", text);
-        if (result.success) {
-            console.log("5. got avatar, stashing in State, updating cache ", result.videoUrl)
-            setAvatar(result.videoUrl)
+        if (result && result.success) {
+            console.log("✅ D_ID: got avatar, stashing in State, updating cache ", result.videoUrl)
+            setAvatarFromDID(result.videoUrl)
             localStorage.setItem("avatar", result.videoUrl)
+            console.log("✅ D_ID: avatar MP4 is in cache")
         } else {
-            console.log("5. DIDN'T get avatar", result);
-            setAvatar(null)
-            console.error("Failed to generate avatar.");
+            setAvatarFromDID(null)
+            console.log("❌ D_ID: Failed To Get Avatar", result.message);
+            setError(`❌ D_ID: ${result.message}`)
         }
     };
 
@@ -78,23 +89,19 @@ const HomePage = () => {
                 setScrapedContent(null)
                 const result = await window.scraper.scrapeURL(url);
                 if (result.success) {
+                    console.log("✅ SCRAPED: scraped content successfully")
                     setScrapedContent(result.content); // preview it on screen
-                    fetchParaphrased(result.content); // send to b/e for GPT paraphrase
+                    fetchParaphrasedFromGPT(result.content); // send to b/e for GPT paraphrase
                     setFetchingScrape(false)
-
-                    setTimeout(() => {
-                        window.scrollTo({
-                            top: 700,
-                            behavior: 'smooth',
-                        });
-                    }, 200);
                 } else {
-                    setScrapedContent(`Error: ${result.error}`);
+                    console.log(`❌ SCRAPE: ${result.error}`);
+                    setError(`❌ SCRAPE: ${result.error}`)
+                    setScrapedContent(null);
                     setFetchingScrape(false);
                 }
             } catch (err) {
-                console.error("Scraping failed:", err)
-                setScrapedContent("Unexpected error occurred.");
+                console.log("❌ SCRAPE: Scraping failed:", err)
+                setScrapedContent(null);
                 setFetchingScrape(false)
             } finally {
                 setFetchingScrape(false);
@@ -104,18 +111,19 @@ const HomePage = () => {
     }, [url])
 
     useEffect(() => {
-        if (paraphrasedArticle) {
-            console.log("1. fetching cached avatar...")
+        if (url && paraphrasedArticleFromGPT) {
+            console.log("fetching cached avatar...")
             const cachedAvatar = localStorage.getItem("avatar")
-            console.log("2. cached avatar...", cachedAvatar)
+            console.log("cached avatar: ", cachedAvatar)
             if (!cachedAvatar) {
-                console.log("3. no cached avatar, so generating one...")
-                createAvatar(paraphrasedArticle);
+                console.log("🟠 CACHE: no cached avatar, so generating one...")
+                fetchAvatarFromDID(paraphrasedArticleFromGPT);
             } else {
-                setAvatar(cachedAvatar)
+                console.log("✅ CACHE: cached avatar")
+                setAvatarFromDID(cachedAvatar)
             }
         }
-    }, [paraphrasedArticle]);
+    }, [url, paraphrasedArticleFromGPT]);
 
     return (
         <ContentContainer
@@ -132,31 +140,29 @@ const HomePage = () => {
                 clearItem={handleClear}
             />
 
+            <p style={{ fontWeight: 800, marginTop: -20, color: "darkred", fontSize: 9, marginBottom: 30 }}>{localError || ""}</p>
+
             {url && (
-                <TrafficLight
+                <TrafficLights
                     scrapedContent={(!fetchingScrape && scrapedContent)}
-                    paraphrasedArticle={paraphrasedArticle}
-                    avatarGenerated={avatar}
+                    paraphrasedArticle={paraphrasedArticleFromGPT}
+                    avatarGenerated={avatarFromDID}
                 />
             )}
-            {fetchingScrape && <BeatLoader />}
 
+            <p style={{ marginBottom: -5, color: "orange" }}>Original: </p>
             {scrapedContent && <TextPreview content={scrapedContent} />}
 
-            <hr />
-            <hr />
-            <hr />
-            <hr />
-            <hr />
-            {paraphrasedArticle && (
-                <ParaphrasedArticle
-                    content={paraphrasedArticle}
+            <p style={{ fontWeight: 800, marginBottom: -5, color: "darkgreen" }}>Your Version: </p>
+            {paraphrasedArticleFromGPT && (
+                <TextPreview
+                    content={paraphrasedArticleFromGPT}
                 />
             )}
 
-            {avatar && (
+            {avatarFromDID && (
                 <video controls autoPlay>
-                    <source src={avatar} type="video/mp4" />
+                    <source src={avatarFromDID} type="video/mp4" />
                     Your browser does not support /the video tag.
                 </video>
             )}

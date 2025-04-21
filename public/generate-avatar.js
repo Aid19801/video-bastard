@@ -16,7 +16,7 @@ const generateAvatar = async (text) => {
         const creationRes = await did.talks.create({
             script: {
                 type: "text",
-                input: MOCK_TEXT
+                input: text
             },
             config: {
                 fluent: true,
@@ -46,9 +46,12 @@ const generateAvatar = async (text) => {
             videoUrl: talkData.result_url,
         };
     } catch (error) {
-        console.log("GAGGGGHHHHH!!!! ========= NOT validated ========")
-        console.error("avatar generation error: ", error);
-        return null;
+        console.log("❌ D_ID [Avatar Generation] Fail: ", error.response.statusText, " | ", error.response.data.description)
+        return {
+            success: false,
+            message: `${error.response.statusText} " | " ${error.response.data.kind} ${error.response.data.description}`,
+            videoUrl: null,
+        };
     }
 }
 

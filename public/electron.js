@@ -4,7 +4,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fetch = require('node-fetch');
 const cheerio = require('cheerio');
-const { generateSatiricalVersion } = require('./paraphrase');
+const { generateSatiricalVersion, generateSatiricalVersionOllama } = require('./paraphrase');
 const { generateAvatar } = require('./generate-avatar');
 
 function createWindow() {
@@ -59,7 +59,9 @@ ipcMain.handle('generate-avatar', async (event, text) => {
 });
 
 ipcMain.handle("loaded-original-article", async (event, scrapedContent) => {
-    const result = await generateSatiricalVersion(scrapedContent);
+    // const result = await generateSatiricalVersion(scrapedContent);
+    const result = await generateSatiricalVersionOllama(scrapedContent);
+    console.log("====== 2", result)
     return result;
 });
 

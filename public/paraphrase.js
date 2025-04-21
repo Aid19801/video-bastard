@@ -37,4 +37,27 @@ async function generateSatiricalVersion(scrapedContent) {
     }
 }
 
-module.exports = { generateSatiricalVersion };
+async function generateSatiricalVersionOllama(prompt) {
+    try {
+        const _prompt = `Rewrite this in a snarky, nihilistic way but dont give me any qualifying preface in your response. Just the paraphrased, nihilistic version of this news story. Minimise repition of writing style and phrases. The more nihilistic the beter: ${prompt}`;
+        const res = await fetch("http://localhost:11434/api/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                model: "llama3.2:latest",  // or "llama3", depending on what you've pulled
+                prompt: _prompt,
+                stream: false       // turn on streaming later if you want to get fancy
+            }),
+        });
+        const data = await res.json();
+        return {
+            success: true,
+            content: data.response
+        }
+    } catch (error) {
+        console.log("error: ", error.message)
+        return error.message
+    }
+}
+
+module.exports = { generateSatiricalVersion, generateSatiricalVersionOllama };
