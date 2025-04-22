@@ -17,7 +17,7 @@ export function TrafficLight({
                 <span className="trafficLight" style={{ background: paraphrasedArticle ? "green" : "grey" }} />
             </div>
             <div className="flex-row">
-                <p className="status">audio generated: </p>
+                <p className="status">video generated: </p>
                 <span className="trafficLight" style={{ background: avatarGenerated ? "green" : "grey" }} />
             </div>
         </div>

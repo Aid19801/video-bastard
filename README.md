@@ -23,6 +23,12 @@ Avatar video is then played in-app and will ultimately be uploaded to YouTube.
     - ElevenLabs API | 🔴
     - YouTube Upload API | 🔴
 
+- Avatar Generation Libraries To Investigate:
+    - [Synthesia](https://www.synthesia.io/)
+    - [HeyGen](https://www.youtube.com/watch?v=xHZ3kfzP6YY)
+    - [D_ID](https://studio.d-id.com/)
+    - [ElevenLabs](https://elevenlabs.io/)
+
 #### Tooling
 
 Electron

@@ -8,6 +8,25 @@
   animation: floatSway 3s ease-in-out infinite;
 }
 
+.errorHandler {
+  font-weight: 800;
+  margin-top: -20px;
+  color: pink;
+  font-size: 9px;
+  margin-bottom: 30;
+}
+
+.btn {
+  border: 0px;
+  background: orange;
+  color: white;
+  font-weight: 800;
+  padding: 20px 40px;
+  border-radius: 12px;
+  font-family: monospace;
+  font-size: 15px;
+}
+
 @keyframes floatSway {
   0% {
     transform: translate(0px, 0px);

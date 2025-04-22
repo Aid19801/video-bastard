@@ -10,7 +10,7 @@
   .linkInput {
     flex: 1;
     padding: 0.5rem 1rem;
-    font-size: 1rem;
+    font-size: 13px;
     transition: all 0.3s ease;
     border: 0px;
     background: grey;

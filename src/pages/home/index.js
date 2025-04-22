@@ -163,36 +163,56 @@ const HomePage = () => {
                 clearItem={handleClear}
             />
 
-            <p style={{ fontWeight: 800, marginTop: -20, color: "darkred", fontSize: 9, marginBottom: 30 }}>{localError || ""}</p>
+            <p className="errorHandler">{localError || ""}</p>
 
             {url && (
-                <TrafficLights
-                    scrapedContent={(!fetchingScrape && scrapedContent)}
-                    paraphrasedArticle={paraphrasedArticleFromGPT}
-                    avatarGenerated={avatarFromDID}
-                />
-            )}
-
-            {scrapedContent && (
                 <>
-                    <p style={{ marginBottom: -5, color: "orange" }}>Original: </p>
-                    <TextPreview content={scrapedContent} />
+                    <span style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.4)", width: "400px", marginTop: 0, marginBottom: 30 }} />
+                    <TrafficLights
+                        scrapedContent={(!fetchingScrape && scrapedContent)}
+                        paraphrasedArticle={paraphrasedArticleFromGPT}
+                        avatarGenerated={avatarFromDID}
+                    />
+                    <span style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.4)", width: "400px", marginTop: 20, marginBottom: 30 }} />
                 </>
             )}
+
+            {
+                <div style={{ display: "flex", flexDirection: paraphrasedArticleFromGPT ? "row" : "column" }}>
+                    {scrapedContent && (
+                        <TextPreview title="Original: " content={scrapedContent} />
+                    )}
+
+                    {paraphrasedArticleFromGPT && (
+                        <TextPreview
+                            title="AI / New: "
+                            content={paraphrasedArticleFromGPT}
+                            isEditable
+                            onSave={(newText) => {
+                                setParaphrasedArticleFromGPT(newText);
+                            }}
+                        />
+                    )}
+                </div>
+            }
 
             {paraphrasedArticleFromGPT && (
-                <>
-                    <p style={{ fontWeight: 800, marginBottom: -5, color: "darkgreen" }}>Your Version: </p>
-                    <TextPreview content={paraphrasedArticleFromGPT} />
-                </>
+                <button className="btn" style={{ marginTop: 30, marginBottom: 20 }} onClick={() => console.log("Generating video...")}>
+                    Generate Video
+                </button>
             )}
-
             {avatarFromDID && (
                 <video controls autoPlay>
                     <source src={avatarFromDID} type="video/mp4" />
                     Your browser does not support /the video tag.
                 </video>
             )}
+            {/* {!avatarFromDID && (
+                <video controls style={{ maxWidth: 500, maxHeight: 300, border: "5px solid orange", borderRadius: 12, marginTop: 30 }}>
+                    <source src="https://resource2.heygen.ai/video/transcode/e15dd0a3dccb42d5993a8b0499ecfe4d/1280x720.mp4?response-content-disposition=attachment%3B+filename%2A%3DUTF-8%27%27SeanCombs%2520bit.mp4" type="video/mp4" />
+                    Your browser does not support /the video tag.
+                </video>
+            )} */}
 
 
         </ContentContainer>

@@ -1,13 +1,15 @@
 .trafficLightsContainer {
     display: flex;
-    flex-direction: column;
-    width: 240px;
+    flex-direction: row;
+    width: auto;    
 
 }
 
 .trafficLightsContainer > div {
     justify-content: flex-end;
     margin-bottom: 10px;
+    align-items: center;
+    margin-right: 20px;
 }
 
 
@@ -17,7 +19,7 @@
     border-radius: 50%;
     background-color: grey;
     border: 0px;
-    margin-left: 20px;
+    margin-left: 10px;
 }
 
 .trafficLightsContainer > div > p.status {
