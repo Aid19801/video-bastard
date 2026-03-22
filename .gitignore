@@ -1,0 +1,9 @@
+.claude/*
+
+.env
+dev-assets/*.mp4
+dev-assets/*.mov
+dev-assets/*.mkv
+
+node_modules/
+out/

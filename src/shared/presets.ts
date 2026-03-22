@@ -1,0 +1,100 @@
+import type { ExportPreset } from './types'
+
+export const PRESETS: ExportPreset[] = [
+  {
+    id: 'tiktok',
+    name: 'TikTok',
+    label: 'TikTok / Reels / Shorts',
+    width: 1080,
+    height: 1920,
+    fps: 30,
+    videoBitrate: '4000k',
+    audioBitrate: '128k',
+    maxDurationSeconds: 60,
+    codec: 'libx264',
+    format: 'mp4',
+    titleSuffix: 'TikTok'
+  },
+  {
+    id: 'youtube',
+    name: 'YouTube',
+    label: 'YouTube (1080p)',
+    width: 1920,
+    height: 1080,
+    fps: 60,
+    videoBitrate: '8000k',
+    audioBitrate: '192k',
+    codec: 'libx264',
+    format: 'mp4',
+    titleSuffix: 'YouTube'
+  },
+  {
+    id: 'instagram-feed',
+    name: 'Instagram Feed',
+    label: 'Instagram Feed (Square)',
+    width: 1080,
+    height: 1080,
+    fps: 30,
+    videoBitrate: '8000k',
+    audioBitrate: '192k',
+    codec: 'libx264',
+    format: 'mp4',
+    titleSuffix: 'Instagram'
+  },
+  {
+    id: 'instagram-story',
+    name: 'Instagram Story',
+    label: 'Instagram Story / Reel',
+    width: 1080,
+    height: 1920,
+    fps: 30,
+    videoBitrate: '3500k',
+    audioBitrate: '128k',
+    maxDurationSeconds: 59,
+    codec: 'libx264',
+    format: 'mp4',
+    titleSuffix: 'Insta Story'
+  },
+  {
+    id: 'twitter',
+    name: 'Twitter / X',
+    label: 'Twitter / X',
+    width: 1280,
+    height: 720,
+    fps: 30,
+    videoBitrate: '2500k',
+    audioBitrate: '128k',
+    maxDurationSeconds: 140,
+    codec: 'libx264',
+    format: 'mp4',
+    titleSuffix: 'X'
+  },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn',
+    label: 'LinkedIn',
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    videoBitrate: '5000k',
+    audioBitrate: '128k',
+    maxDurationSeconds: 600,
+    codec: 'libx264',
+    format: 'mp4',
+    titleSuffix: 'LinkedIn'
+  },
+  {
+    id: 'bluesky',
+    name: 'Bluesky',
+    label: 'Bluesky',
+    width: 1080,
+    height: 1080,
+    fps: 30,
+    videoBitrate: '3000k',
+    audioBitrate: '128k',
+    maxDurationSeconds: 180,
+    codec: 'libx264',
+    format: 'mp4',
+    titleSuffix: 'Bluesky'
+  }
+]
