@@ -1,4 +1,4 @@
-import { BrowserWindow, IpcMain } from 'electron'
+import { app, BrowserWindow, IpcMain } from 'electron'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegStatic from 'ffmpeg-static'
 import { join, basename, extname } from 'path'
@@ -8,8 +8,16 @@ import { PRESETS } from '../shared/presets'
 import type { StartExportArgs, ExportJob, ExportPreset } from '../shared/types'
 import { transcribeVideo, transcribeViaWorker, buildSubtitleDrawtext, probeVideoSize, type WordTimestamp } from './subtitles'
 
+export function getFfmpegPath(): string {
+  const raw = ffmpegStatic as string
+  if (app.isPackaged) {
+    return raw.replace('app.asar', 'app.asar.unpacked')
+  }
+  return raw
+}
+
 if (ffmpegStatic) {
-  ffmpeg.setFfmpegPath(ffmpegStatic)
+  ffmpeg.setFfmpegPath(getFfmpegPath())
 }
 
 function getOutputPath(inputPath: string, presetId: string, outputDir: string): string {

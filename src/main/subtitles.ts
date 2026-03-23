@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import ffmpegStatic from 'ffmpeg-static'
+import { getFfmpegPath } from './ffmpeg'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { existsSync, unlinkSync, createReadStream, readFileSync } from 'fs'
@@ -20,7 +20,7 @@ export interface WordTimestamp {
 // Extract audio to a small mp3 for the Whisper API (max 25MB limit)
 async function extractAudio(inputPath: string): Promise<string> {
   const outPath = join(tmpdir(), `vb-audio-${Date.now()}.mp3`)
-  await execFileAsync(ffmpegStatic as string, [
+  await execFileAsync(getFfmpegPath(), [
     '-i', inputPath,
     '-vn',
     '-acodec', 'mp3',
@@ -60,7 +60,9 @@ export async function transcribeVideo(
   }
 }
 
-// Worker proxy path — used in production (licence key validates via Lemon Squeezy)
+const FUNK_API_URL = process.env['FUNK_API_URL'] || 'https://funk-api-afd30b1f0bb5.herokuapp.com'
+
+// Transcribe via funk-api (validates licence + calls Whisper server-side)
 export async function transcribeViaWorker(
   inputPath: string,
   licenceKey: string,
@@ -73,15 +75,15 @@ export async function transcribeViaWorker(
     onProgress('Transcribing with Whisper…')
     const audioBase64 = readFileSync(audioPath).toString('base64')
 
-    const res = await fetch(`${WORKER_URL}/transcribe`, {
+    const res = await fetch(`${FUNK_API_URL}/transcribe`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ licenceKey, audioBase64 }),
+      body: JSON.stringify({ licence_key: licenceKey, audioBase64 }),
     })
 
     if (!res.ok) {
-      const err = await res.json() as { error?: string }
-      throw new Error(err.error ?? `Worker error ${res.status}`)
+      const err = await res.json() as { detail?: string; error?: string }
+      throw new Error(err.detail ?? err.error ?? `Transcription error ${res.status}`)
     }
 
     const words = await res.json() as WordTimestamp[]
@@ -92,16 +94,16 @@ export async function transcribeViaWorker(
   }
 }
 
-// Activate a licence key against the worker (returns true if valid)
+// Activate a licence key against funk-api
 export async function activateLicence(licenceKey: string): Promise<void> {
-  const res = await fetch(`${WORKER_URL}/activate`, {
+  const res = await fetch(`${FUNK_API_URL}/licence/validate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ licenceKey }),
+    body: JSON.stringify({ licence_key: licenceKey }),
   })
   if (!res.ok) {
-    const err = await res.json() as { error?: string }
-    throw new Error(err.error ?? 'Invalid licence key')
+    const err = await res.json() as { detail?: string; error?: string }
+    throw new Error(err.detail ?? err.error ?? 'Invalid licence key')
   }
 }
 
@@ -192,7 +194,7 @@ export function buildSubtitleDrawtext(
 // Probe source video dimensions so subtitle placement can be calculated precisely
 export async function probeVideoSize(inputPath: string): Promise<{ w: number; h: number }> {
   try {
-    await execFileAsync(ffmpegStatic as string, ['-i', inputPath])
+    await execFileAsync(getFfmpegPath(), ['-i', inputPath])
   } catch (err: unknown) {
     const msg = (err as { stderr?: string; message?: string }).stderr
       || (err as { message?: string }).message
