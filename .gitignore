@@ -1,0 +1,10 @@
+.claude
+
+.env
+dev-assets/
+
+node_modules/
+out/
+dist
+
+*.DS_Store
