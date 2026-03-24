@@ -493,6 +493,21 @@ button {
   gap: 8px;
 }
 
+.meta-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 1.5px;
+  text-transform: lowercase;
+  font-family: monospace;
+}
+
 .meta-input,
 .meta-textarea {
   width: 100%;
@@ -660,6 +675,54 @@ button {
 
 .captions-key-input::placeholder {
   color: var(--text-muted);
+}
+
+/* Subtitle style + bg picker chips */
+.style-picker,
+.bg-picker-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.style-chip {
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: monospace;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.style-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.style-chip--active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: black;
+}
+
+.bg-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.bg-picker-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 1.5px;
+  text-transform: lowercase;
+  font-family: monospace;
 }
 
 /* Transcribe status */

@@ -27,6 +27,9 @@ export interface ExportJob {
   description?: string
 }
 
+export type SubtitleStyle = 'standard' | 'danger' | 'f27'
+export type BgStyle = 'slo-mo-bnw' | 'rainbow' | 'scratchy-blue' | 'checks' | 'none'
+
 export interface StartExportArgs {
   inputPath: string
   presetIds: string[]
@@ -34,6 +37,8 @@ export interface StartExportArgs {
   title: string
   description: string
   subtitles: boolean
+  subtitleStyle?: SubtitleStyle
+  bgStyle?: BgStyle
   openaiApiKey?: string
   licenceKey?: string
 }

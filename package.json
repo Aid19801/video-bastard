@@ -51,7 +51,10 @@
         "filter": [
           "**/*"
         ]
-      }
+      },
+      { "from": "rainbow.jpg", "to": "backgrounds/rainbow.jpg" },
+      { "from": "scratchy_blue.jpg", "to": "backgrounds/scratchy_blue.jpg" },
+      { "from": "checks.jpg", "to": "backgrounds/checks.jpg" }
     ],
     "files": [
       "out/**/*",

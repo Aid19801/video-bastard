@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import { getFfmpegPath } from './ffmpeg'
 import { join } from 'path'
+import type { SubtitleStyle } from '../shared/types'
 import { tmpdir } from 'os'
 import { existsSync, unlinkSync, createReadStream, readFileSync } from 'fs'
 import { execFile } from 'child_process'
@@ -82,8 +83,12 @@ export async function transcribeViaWorker(
     })
 
     if (!res.ok) {
-      const err = await res.json() as { detail?: string; error?: string }
-      throw new Error(err.detail ?? err.error ?? `Transcription error ${res.status}`)
+      let msg = `Transcription error ${res.status}`
+      try {
+        const err = await res.json() as { detail?: string; error?: string }
+        msg = err.detail ?? err.error ?? msg
+      } catch {}
+      throw new Error(msg)
     }
 
     const words = await res.json() as WordTimestamp[]
@@ -136,8 +141,8 @@ function yBaseForPreset(preset: ExportPreset, srcW: number, srcH: number): numbe
   return preset.height - fontSizeForPreset(preset) - 80
 }
 
-// Find a bold font on common macOS paths; fall back to empty string (FFmpeg default)
-function findFontFile(): string {
+// Find a bold font on common paths; fall back to empty string (FFmpeg default)
+function findImpactFont(): string {
   const candidates = [
     '/System/Library/Fonts/Supplemental/Impact.ttf',
     '/Library/Fonts/Impact.ttf',
@@ -147,15 +152,25 @@ function findFontFile(): string {
   return candidates.find((p) => existsSync(p)) ?? ''
 }
 
+function findArialFont(): string {
+  const candidates = [
+    '/Library/Fonts/Arial.ttf',
+    'C:/Windows/Fonts/arial.ttf',
+    '/usr/share/fonts/truetype/msttcorefonts/Arial.ttf',
+    '/System/Library/Fonts/Helvetica.ttc',
+  ]
+  return candidates.find((p) => existsSync(p)) ?? ''
+}
+
 export function buildSubtitleDrawtext(
   words: WordTimestamp[],
   preset: ExportPreset,
   srcWidth = 1920,
-  srcHeight = 1080
+  srcHeight = 1080,
+  style: SubtitleStyle = 'standard'
 ): string {
   if (words.length === 0) return ''
 
-  // Portrait uses 2-word chunks — font is large (152px) and 3 words often exceeds frame width
   const CHUNK_SIZE = preset.height >= preset.width ? 2 : 3
   const chunks: WordTimestamp[][] = []
   for (let i = 0; i < words.length; i += CHUNK_SIZE) {
@@ -165,16 +180,51 @@ export function buildSubtitleDrawtext(
   const fontSize = fontSizeForPreset(preset)
   const yBase = yBaseForPreset(preset, srcWidth, srcHeight)
   const bounce = 40
-  const fontFile = findFontFile()
-  const fontOpt = fontFile ? `fontfile='${fontFile}':` : ''
+
+  const impactFont = findImpactFont()
+  const arialFont = findArialFont()
 
   return chunks.map((chunk) => {
     const text = escapeDrawtext(chunk.map((w) => w.word).join(' '))
     const start = chunk[0].start.toFixed(3)
     const end = chunk[chunk.length - 1].end.toFixed(3)
-    // Fade in + bounce upward over 0.25s
     const alphaExpr = `if(lt(t-${start},0.25),(t-${start})/0.25,1)`
     const yExpr = `${yBase}+${bounce}*max(0,1-(t-${start})/0.25)`
+    const baseOpts =
+      `x='max(40,(w-text_w)/2)':` +
+      `y='${yExpr}':` +
+      `alpha='${alphaExpr}':` +
+      `fix_bounds=1:` +
+      `enable='between(t,${start},${end})'`
+
+    if (style === 'danger') {
+      const fontOpt = impactFont ? `fontfile='${impactFont}':` : ''
+      return (
+        `drawtext=${fontOpt}` +
+        `text='${text}':` +
+        `fontsize=${Math.round(fontSize * 0.5)}:` +
+        `fontcolor=red:` +
+        `borderw=3:bordercolor=white:` +
+        `box=0:` +
+        baseOpts
+      )
+    }
+
+    if (style === 'f27') {
+      const fontOpt = arialFont ? `fontfile='${arialFont}':` : ''
+      return (
+        `drawtext=${fontOpt}` +
+        `text='${text}':` +
+        `fontsize=${Math.round(fontSize * 0.85)}:` +
+        `fontcolor=white:` +
+        `borderw=0:` +
+        `box=1:boxcolor=orange:boxborderw=16:` +
+        baseOpts
+      )
+    }
+
+    // standard (default)
+    const fontOpt = impactFont ? `fontfile='${impactFont}':` : ''
     return (
       `drawtext=${fontOpt}` +
       `text='${text}':` +
@@ -182,11 +232,7 @@ export function buildSubtitleDrawtext(
       `fontcolor=white:` +
       `borderw=3:bordercolor=black@0.9:` +
       `box=1:boxcolor=black@0.55:boxborderw=14:` +
-      `x='max(40,(w-text_w)/2)':` +
-      `y='${yExpr}':` +
-      `alpha='${alphaExpr}':` +
-      `fix_bounds=1:` +
-      `enable='between(t,${start},${end})'`
+      baseOpts
     )
   }).join(',')
 }

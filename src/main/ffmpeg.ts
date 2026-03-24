@@ -5,7 +5,7 @@ import { join, basename, extname } from 'path'
 import { randomUUID } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
 import { PRESETS } from '../shared/presets'
-import type { StartExportArgs, ExportJob, ExportPreset } from '../shared/types'
+import type { StartExportArgs, ExportJob, ExportPreset, BgStyle } from '../shared/types'
 import { transcribeVideo, transcribeViaWorker, buildSubtitleDrawtext, probeVideoSize, type WordTimestamp } from './subtitles'
 
 export function getFfmpegPath(): string {
@@ -18,6 +18,22 @@ export function getFfmpegPath(): string {
 
 if (ffmpegStatic) {
   ffmpeg.setFfmpegPath(getFfmpegPath())
+}
+
+const BG_IMAGE_FILES: Record<string, string> = {
+  'rainbow': 'rainbow.jpg',
+  'scratchy-blue': 'scratchy_blue.jpg',
+  'checks': 'checks.jpg',
+}
+
+function getBgImagePath(bgStyle: BgStyle): string | null {
+  const filename = BG_IMAGE_FILES[bgStyle]
+  if (!filename) return null
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'backgrounds', filename)
+  }
+  // dev: images are at project root; __dirname = out/main
+  return join(__dirname, '../../', filename)
 }
 
 function getOutputPath(inputPath: string, presetId: string, outputDir: string): string {
@@ -45,46 +61,76 @@ function sendToRenderer(channel: string, data: unknown): void {
  *
  * The main footage is then composited at full quality in the centre foreground.
  */
-function buildPortraitFilterComplex(preset: ExportPreset, subtitleDrawtext?: string): string {
+interface PortraitFilterResult {
+  filterComplex: string
+  bgInput?: string  // path to bg image if a second input is needed
+}
+
+function buildPortraitFilterComplex(
+  preset: ExportPreset,
+  bgStyle: BgStyle,
+  subtitleDrawtext?: string
+): PortraitFilterResult {
   const { width: w, height: h, fps } = preset
 
-  // Scale large enough that after a 10° rotation the full portrait frame is covered.
-  // Worst case for landscape sources: need ~2700px wide. 3000 gives comfortable margin.
-  const bgScale = 3000
+  const withSubs = (base: string) =>
+    subtitleDrawtext ? `${base};${subtitleDrawtext}[out]` : base.replace('[step_final]', '[out]')
 
-  const bgChain = (angle: string, inL: string, outL: string): string =>
-    `[${inL}]trim=duration=30,` +
-    `setpts=(PTS-STARTPTS)/0.3,` +
-    `scale=${bgScale}:-2,` +
-    `hue=s=0,` +
-    `rotate=${angle}:ow=${w}:oh=${h}:c=black@0,` +
-    `format=rgba,` +
-    `colorchannelmixer=aa=0.3` +
-    `[${outL}]`
+  // ── slo-mo BnW (original behaviour) ──────────────────────────────────────
+  if (bgStyle === 'slo-mo-bnw' || bgStyle === undefined) {
+    const bgScale = 3000
+    const bgChain = (angle: string, inL: string, outL: string): string =>
+      `[${inL}]trim=duration=30,setpts=(PTS-STARTPTS)/0.3,scale=${bgScale}:-2,hue=s=0,` +
+      `rotate=${angle}:ow=${w}:oh=${h}:c=black@0,format=rgba,colorchannelmixer=aa=0.3[${outL}]`
 
-  return [
-    // Split source into: main video + two background copies
-    `[0:v]split=3[mainv][bg1in][bg2in]`,
+    const parts = [
+      `[0:v]split=3[mainv][bg1in][bg2in]`,
+      bgChain('-PI/18', 'bg1in', 'bg1out'),
+      bgChain('PI/18', 'bg2in', 'bg2out'),
+      `[mainv]scale=${w}:-2[mainscaled]`,
+      `color=c=black:s=${w}x${h}:r=${fps}:d=10000[canvas]`,
+      `[canvas][bg1out]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto[step1]`,
+      `[step1][bg2out]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto[step2]`,
+      subtitleDrawtext
+        ? `[step2][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[composed];[composed]${subtitleDrawtext}[out]`
+        : `[step2][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[out]`,
+    ]
+    return { filterComplex: parts.join(';') }
+  }
 
-    // Background 1: rotated -10° (fills gaps behind upper portion)
-    bgChain('-PI/18', 'bg1in', 'bg1out'),
+  // ── none (black bars) ─────────────────────────────────────────────────────
+  if (bgStyle === 'none') {
+    const parts = [
+      `color=c=black:s=${w}x${h}:r=${fps}:d=10000[canvas]`,
+      `[0:v]scale=${w}:-2[mainscaled]`,
+      subtitleDrawtext
+        ? `[canvas][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[composed];[composed]${subtitleDrawtext}[out]`
+        : `[canvas][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[out]`,
+    ]
+    return { filterComplex: parts.join(';') }
+  }
 
-    // Background 2: rotated +10° (fills gaps behind lower portion)
-    bgChain('PI/18', 'bg2in', 'bg2out'),
-
-    // Main video: scale to target width, preserve aspect ratio
-    `[mainv]scale=${w}:-2[mainscaled]`,
-
-    // Black canvas as base layer
-    `color=c=black:s=${w}x${h}:r=${fps}:d=10000[canvas]`,
-
-    // Layer: canvas → bg1 → bg2 → main
-    `[canvas][bg1out]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto[step1]`,
-    `[step1][bg2out]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto[step2]`,
+  // ── image backgrounds (rainbow, scratchy-blue, checks) ────────────────────
+  // Layout: black base, image at top + image at bottom, main video centred.
+  // Scale image to frame width (natural aspect ratio) so it's never zoomed.
+  const bgInput = getBgImagePath(bgStyle)
+  const parts = [
+    // Black canvas
+    `color=c=black:s=${w}x${h}:r=${fps}:d=10000[base]`,
+    // Scale bg image to frame width, keep aspect ratio — split into top + bottom copies
+    `[1:v]scale=${w}:-2,split=2[bgtop][bgbot]`,
+    // Top copy: pin to top of frame
+    `[base][bgtop]overlay=0:0[step1]`,
+    // Bottom copy: pin to bottom of frame
+    `[step1][bgbot]overlay=0:H-h[step2]`,
+    // Main video: fit within frame
+    `[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[mainscaled]`,
+    // Composite video centred on top
     subtitleDrawtext
       ? `[step2][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[composed];[composed]${subtitleDrawtext}[out]`
       : `[step2][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[out]`,
-  ].join(';')
+  ]
+  return { filterComplex: parts.join(';'), bgInput: bgInput ?? undefined }
 }
 
 export function registerFFmpegHandlers(ipcMain: IpcMain): void {
@@ -137,14 +183,19 @@ export function registerFFmpegHandlers(ipcMain: IpcMain): void {
     }
 
     for (const job of jobs) {
-      await runJob(job, subtitleWords)
+      await runJob(job, subtitleWords, args.subtitleStyle, args.bgStyle)
     }
 
     return jobs.map((j) => j.id)
   })
 }
 
-async function runJob(job: ExportJob, subtitleWords: WordTimestamp[] = []): Promise<void> {
+async function runJob(
+  job: ExportJob,
+  subtitleWords: WordTimestamp[] = [],
+  subtitleStyle: StartExportArgs['subtitleStyle'] = 'standard',
+  bgStyle: StartExportArgs['bgStyle'] = 'slo-mo-bnw'
+): Promise<void> {
   const { preset, inputPath } = job
   const portrait = preset.height >= preset.width
   let srcSize = { w: 1920, h: 1080 }
@@ -152,7 +203,7 @@ async function runJob(job: ExportJob, subtitleWords: WordTimestamp[] = []): Prom
     srcSize = await probeVideoSize(inputPath)
   }
   const subtitleDrawtext = subtitleWords.length > 0
-    ? buildSubtitleDrawtext(subtitleWords, preset, srcSize.w, srcSize.h)
+    ? buildSubtitleDrawtext(subtitleWords, preset, srcSize.w, srcSize.h, subtitleStyle ?? 'standard')
     : ''
 
   return new Promise((resolve) => {
@@ -161,10 +212,6 @@ async function runJob(job: ExportJob, subtitleWords: WordTimestamp[] = []): Prom
       '-metadata', `title=${title ?? ''}`,
       '-metadata', `description=${description ?? ''}`,
     ]
-    // Compatibility flags accepted by every major platform's web uploader:
-    // - main profile + level 4.0: Instagram/TikTok web rejects High profile
-    // - yuv420p: required for broad decoder support
-    // - vsync cfr: VFR source (phones, YouTube) causes grey-out on web uploaders
     const compatOpts = [
       '-profile:v main',
       '-level:v 4.0',
@@ -177,8 +224,19 @@ async function runJob(job: ExportJob, subtitleWords: WordTimestamp[] = []): Prom
     let cmd: ReturnType<typeof ffmpeg>
 
     if (portrait) {
-      const filterComplex = buildPortraitFilterComplex(preset, subtitleDrawtext || undefined)
-      cmd = ffmpeg(inputPath).outputOptions([
+      const effectiveBgStyle = bgStyle ?? 'slo-mo-bnw'
+      const { filterComplex, bgInput } = buildPortraitFilterComplex(
+        preset,
+        effectiveBgStyle,
+        subtitleDrawtext || undefined
+      )
+      console.log('[vb] bgStyle:', effectiveBgStyle, '| bgInput:', bgInput)
+      console.log('[vb] filterComplex:', filterComplex)
+      cmd = ffmpeg(inputPath)
+      if (bgInput) {
+        cmd = cmd.input(bgInput).inputOptions(['-loop', '1'])
+      }
+      cmd = cmd.outputOptions([
         '-filter_complex', filterComplex,
         '-map', '[out]',
         '-map', '0:a?',

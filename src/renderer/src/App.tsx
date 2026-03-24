@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PRESETS } from '../../shared/presets'
-import type { ExportJob } from '../../shared/types'
+import type { ExportJob, SubtitleStyle, BgStyle } from '../../shared/types'
 import DropZone from './components/DropZone'
 import ServicePicker from './components/ServicePicker'
 import JobQueue from './components/JobQueue'
@@ -19,6 +19,8 @@ declare global {
         title: string
         description: string
         subtitles: boolean
+        subtitleStyle?: SubtitleStyle
+        bgStyle?: BgStyle
         openaiApiKey?: string
         licenceKey?: string
       }) => Promise<string[]>
@@ -67,6 +69,8 @@ export default function App() {
   const [ytDownload, setYtDownload] = useState<{ label: string; percent: number } | null>(null)
   const [ytError, setYtError] = useState<string | null>(null)
   const [subtitles, setSubtitles] = useState(false)
+  const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>('standard')
+  const [bgStyle, setBgStyle] = useState<BgStyle>('slo-mo-bnw')
   const [apiKey, setApiKeyState] = useState('')
   const [transcribeLabel, setTranscribeLabel] = useState<string | null>(null)
   const [isPackaged, setIsPackaged] = useState(false)
@@ -155,10 +159,12 @@ export default function App() {
       title,
       description,
       subtitles,
+      subtitleStyle,
+      bgStyle,
       openaiApiKey: isPackaged ? undefined : (apiKey || undefined),
       licenceKey: licenceKey || undefined,
     })
-  }, [inputPath, selectedPresets, effectiveOutputDir, title, description, subtitles, apiKey, isPackaged, licenceKey])
+  }, [inputPath, selectedPresets, effectiveOutputDir, title, description, subtitles, subtitleStyle, bgStyle, apiKey, isPackaged, licenceKey])
 
   const handleReset = useCallback(() => {
     setInputPath(null)
@@ -204,6 +210,9 @@ export default function App() {
   }, [])
 
   const canExport = inputPath !== null && selectedPresets.size > 0 && !isExporting
+
+  const PORTRAIT_PRESET_IDS = ['tiktok', 'instagram-feed', 'instagram-story', 'bluesky']
+  const hasPortraitSelected = PORTRAIT_PRESET_IDS.some((id) => selectedPresets.has(id))
 
   if (!licenceChecked) return null
 
@@ -275,20 +284,26 @@ export default function App() {
         {inputPath && !isExporting && (
           <>
             <div className="meta-fields">
-              <input
-                className="meta-input"
-                type="text"
-                placeholder="Title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-              <textarea
-                className="meta-textarea"
-                placeholder="Description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={2}
-              />
+              <div className="meta-field">
+                <span className="meta-label">title</span>
+                <input
+                  className="meta-input"
+                  type="text"
+                  placeholder="Title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </div>
+              <div className="meta-field">
+                <span className="meta-label">description</span>
+                <textarea
+                  className="meta-textarea"
+                  placeholder="Description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={2}
+                />
+              </div>
             </div>
 
             <ServicePicker
@@ -322,7 +337,43 @@ export default function App() {
                   }}
                 />
               )}
+              {subtitles && (
+                <div className="style-picker">
+                  {(['standard', 'danger', 'f27'] as SubtitleStyle[]).map((s) => (
+                    <button
+                      key={s}
+                      className={`style-chip ${subtitleStyle === s ? 'style-chip--active' : ''}`}
+                      onClick={() => setSubtitleStyle(s)}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {hasPortraitSelected && (
+              <div className="bg-picker">
+                <span className="bg-picker-label">background</span>
+                <div className="bg-picker-options">
+                  {([
+                    { id: 'slo-mo-bnw', label: 'slo-mo BnW' },
+                    { id: 'rainbow', label: 'rainbow' },
+                    { id: 'scratchy-blue', label: 'scratchy blue' },
+                    { id: 'checks', label: 'checks' },
+                    { id: 'none', label: 'none' },
+                  ] as { id: BgStyle; label: string }[]).map((opt) => (
+                    <button
+                      key={opt.id}
+                      className={`style-chip ${bgStyle === opt.id ? 'style-chip--active' : ''}`}
+                      onClick={() => setBgStyle(opt.id)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="output-row">
               <div className="output-dir">
