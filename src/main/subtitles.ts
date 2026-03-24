@@ -215,7 +215,7 @@ export function buildSubtitleDrawtext(
       return (
         `drawtext=${fontOpt}` +
         `text='${text}':` +
-        `fontsize=${Math.round(fontSize * 0.85)}:` +
+        `fontsize=${Math.round(fontSize * 0.68)}:` +
         `fontcolor=white:` +
         `borderw=0:` +
         `box=1:boxcolor=orange:boxborderw=16:` +

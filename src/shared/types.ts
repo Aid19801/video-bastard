@@ -41,6 +41,8 @@ export interface StartExportArgs {
   bgStyle?: BgStyle
   openaiApiKey?: string
   licenceKey?: string
+  slamEffect?: boolean
+  wobbleEffect?: boolean
 }
 
 export interface ProgressEvent {

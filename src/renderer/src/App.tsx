@@ -23,6 +23,8 @@ declare global {
         bgStyle?: BgStyle
         openaiApiKey?: string
         licenceKey?: string
+        slamEffect?: boolean
+        wobbleEffect?: boolean
       }) => Promise<string[]>
       selectOutputDir: () => Promise<string | null>
       getDesktopPath: () => Promise<string>
@@ -77,6 +79,8 @@ export default function App() {
   const [licenceKey, setLicenceKey] = useState<string | null>(null)
   const [licenceChecked, setLicenceChecked] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<{ version: string; downloadUrl: string } | null>(null)
+  const [slamEffect, setSlamEffect] = useState(false)
+  const [wobbleEffect, setWobbleEffect] = useState(false)
 
   const effectiveOutputDir = outputDir ?? (inputPath ? dirFromPath(inputPath) : null)
 
@@ -163,8 +167,10 @@ export default function App() {
       bgStyle,
       openaiApiKey: isPackaged ? undefined : (apiKey || undefined),
       licenceKey: licenceKey || undefined,
+      slamEffect,
+      wobbleEffect,
     })
-  }, [inputPath, selectedPresets, effectiveOutputDir, title, description, subtitles, subtitleStyle, bgStyle, apiKey, isPackaged, licenceKey])
+  }, [inputPath, selectedPresets, effectiveOutputDir, title, description, subtitles, subtitleStyle, bgStyle, apiKey, isPackaged, licenceKey, slamEffect, wobbleEffect])
 
   const handleReset = useCallback(() => {
     setInputPath(null)
@@ -271,6 +277,7 @@ export default function App() {
 
         {inputPath && (
           <div className="loaded-file">
+            <span className="meta-label">video</span>
             <div className="file-info">
               <span className="file-icon">🎬</span>
               <span className="file-name">{inputPath.split('/').pop()}</span>
@@ -306,6 +313,7 @@ export default function App() {
               </div>
             </div>
 
+            <span className="meta-label">export for</span>
             <ServicePicker
               presets={PRESETS}
               selected={selectedPresets}
@@ -373,6 +381,30 @@ export default function App() {
                   ))}
                 </div>
               </div>
+            )}
+
+            {hasPortraitSelected && (
+              <label className="captions-toggle">
+                <input
+                  type="checkbox"
+                  checked={slamEffect}
+                  onChange={(e) => setSlamEffect(e.target.checked)}
+                />
+                <span className="captions-toggle-label">Slam effect</span>
+                <span className="captions-toggle-note">video slams in from the side at the start</span>
+              </label>
+            )}
+
+            {hasPortraitSelected && (
+              <label className="captions-toggle">
+                <input
+                  type="checkbox"
+                  checked={wobbleEffect}
+                  onChange={(e) => setWobbleEffect(e.target.checked)}
+                />
+                <span className="captions-toggle-label">Wobble</span>
+                <span className="captions-toggle-note">subtle handheld motion (±7px)</span>
+              </label>
             )}
 
             <div className="output-row">

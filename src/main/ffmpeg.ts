@@ -32,7 +32,6 @@ function getBgImagePath(bgStyle: BgStyle): string | null {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'backgrounds', filename)
   }
-  // dev: images are at project root; __dirname = out/main
   return join(__dirname, '../../', filename)
 }
 
@@ -49,34 +48,45 @@ function sendToRenderer(channel: string, data: unknown): void {
   }
 }
 
-/**
- * Builds a filter_complex string for portrait exports (TikTok, Instagram Story).
- *
- * Instead of black letterbox bars, the empty space is filled by two copies of
- * the source footage that are:
- *   - Trimmed to the first 30s then slowed to 30% speed (~100s output)
- *   - Converted to black & white
- *   - Set to 30% opacity
- *   - One rotated -10° (behind top area), one rotated +10° (behind bottom area)
- *
- * The main footage is then composited at full quality in the centre foreground.
- */
+// Returns the overlay filter string for the main video layer.
+// Supports optional slam-in animation and/or continuous wobble.
+function overlayMain(slamDir?: 'left' | 'right', wobble = false): string {
+  // Wobble: two slow sine harmonics layered for organic handheld feel (max ±7px each axis)
+  // Primary drift ~9s cycle, secondary ~5s cycle — very gradual, no jitter
+  const wobbX = wobble ? `+sin(t*0.7)*4+sin(t*1.3)*3` : ``
+  const wobbY = wobble ? `+sin(t*0.5)*4+sin(t*1.1)*3` : ``
+  const cy = `(H-h)/2${wobbY}`
+
+  if (!slamDir) {
+    if (!wobble) return `overlay=(W-w)/2:(H-h)/2:shortest=1`
+    return `overlay=x='(W-w)/2${wobbX}':y='${cy}':eval=frame:shortest=1`
+  }
+
+  // Slam: fast entry (0.05s) + bounce overshoot (0.1s sin), then wobble at rest
+  const restX = `(W-w)/2${wobbX}`
+  const xExpr =
+    slamDir === 'right'
+      ? `if(lt(t,0.05),W-(W/2+w/2)*t/0.05,if(lt(t,0.15),(W-w)/2-30*sin(PI*(t-0.05)/0.1),${restX}))`
+      : `if(lt(t,0.05),-w+(W/2+w/2)*t/0.05,if(lt(t,0.15),(W-w)/2+30*sin(PI*(t-0.05)/0.1),${restX}))`
+  return `overlay=x='${xExpr}':y='${cy}':eval=frame:shortest=1`
+}
+
 interface PortraitFilterResult {
   filterComplex: string
-  bgInput?: string  // path to bg image if a second input is needed
+  bgInput?: string
 }
 
 function buildPortraitFilterComplex(
   preset: ExportPreset,
   bgStyle: BgStyle,
-  subtitleDrawtext?: string
+  subtitleDrawtext?: string,
+  slamDir?: 'left' | 'right',
+  wobble = false,
 ): PortraitFilterResult {
   const { width: w, height: h, fps } = preset
+  const ov = overlayMain(slamDir, wobble)
 
-  const withSubs = (base: string) =>
-    subtitleDrawtext ? `${base};${subtitleDrawtext}[out]` : base.replace('[step_final]', '[out]')
-
-  // ── slo-mo BnW (original behaviour) ──────────────────────────────────────
+  // ── slo-mo BnW ────────────────────────────────────────────────────────────
   if (bgStyle === 'slo-mo-bnw' || bgStyle === undefined) {
     const bgScale = 3000
     const bgChain = (angle: string, inL: string, outL: string): string =>
@@ -89,11 +99,11 @@ function buildPortraitFilterComplex(
       bgChain('PI/18', 'bg2in', 'bg2out'),
       `[mainv]scale=${w}:-2[mainscaled]`,
       `color=c=black:s=${w}x${h}:r=${fps}:d=10000[canvas]`,
-      `[canvas][bg1out]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto[step1]`,
-      `[step1][bg2out]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto[step2]`,
+      `[canvas][bg1out]overlay=(W-w)/2:(H-h)/2:format=auto[step1]`,
+      `[step1][bg2out]overlay=(W-w)/2:(H-h)/2:format=auto[step2]`,
       subtitleDrawtext
-        ? `[step2][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[composed];[composed]${subtitleDrawtext}[out]`
-        : `[step2][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[out]`,
+        ? `[step2][mainscaled]${ov}[composed];[composed]${subtitleDrawtext}[out]`
+        : `[step2][mainscaled]${ov}[out]`,
     ]
     return { filterComplex: parts.join(';') }
   }
@@ -104,31 +114,23 @@ function buildPortraitFilterComplex(
       `color=c=black:s=${w}x${h}:r=${fps}:d=10000[canvas]`,
       `[0:v]scale=${w}:-2[mainscaled]`,
       subtitleDrawtext
-        ? `[canvas][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[composed];[composed]${subtitleDrawtext}[out]`
-        : `[canvas][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[out]`,
+        ? `[canvas][mainscaled]${ov}[composed];[composed]${subtitleDrawtext}[out]`
+        : `[canvas][mainscaled]${ov}[out]`,
     ]
     return { filterComplex: parts.join(';') }
   }
 
   // ── image backgrounds (rainbow, scratchy-blue, checks) ────────────────────
-  // Layout: black base, image at top + image at bottom, main video centred.
-  // Scale image to frame width (natural aspect ratio) so it's never zoomed.
   const bgInput = getBgImagePath(bgStyle)
   const parts = [
-    // Black canvas
     `color=c=black:s=${w}x${h}:r=${fps}:d=10000[base]`,
-    // Scale bg image to frame width, keep aspect ratio — split into top + bottom copies
     `[1:v]scale=${w}:-2,split=2[bgtop][bgbot]`,
-    // Top copy: pin to top of frame
     `[base][bgtop]overlay=0:0[step1]`,
-    // Bottom copy: pin to bottom of frame
     `[step1][bgbot]overlay=0:H-h[step2]`,
-    // Main video: fit within frame
     `[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[mainscaled]`,
-    // Composite video centred on top
     subtitleDrawtext
-      ? `[step2][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[composed];[composed]${subtitleDrawtext}[out]`
-      : `[step2][mainscaled]overlay=(W-w)/2:(H-h)/2:shortest=1[out]`,
+      ? `[step2][mainscaled]${ov}[composed];[composed]${subtitleDrawtext}[out]`
+      : `[step2][mainscaled]${ov}[out]`,
   ]
   return { filterComplex: parts.join(';'), bgInput: bgInput ?? undefined }
 }
@@ -156,34 +158,31 @@ export function registerFFmpegHandlers(ipcMain: IpcMain): void {
 
     sendToRenderer('export:jobs-created', jobs)
 
-    // Transcribe once before running jobs if captions requested
+    const onProgress = (label: string) => sendToRenderer('export:transcribe-progress', { label })
+
     let subtitleWords: WordTimestamp[] = []
     if (args.subtitles) {
       const wordsFile = `${inputPath}.words.json`
       if (existsSync(wordsFile)) {
-        // Pre-baked dev shortcut — no API call
         try {
           subtitleWords = JSON.parse(readFileSync(wordsFile, 'utf-8')) as WordTimestamp[]
-          sendToRenderer('export:transcribe-progress', { label: 'Using pre-baked captions (dev mode)' })
+          onProgress('Using pre-baked captions (dev mode)')
         } catch {}
       } else {
         try {
-          const onProgress = (label: string) => sendToRenderer('export:transcribe-progress', { label })
           if (args.licenceKey) {
             subtitleWords = await transcribeViaWorker(inputPath, args.licenceKey, onProgress)
           } else if (args.openaiApiKey) {
             subtitleWords = await transcribeVideo(inputPath, args.openaiApiKey, onProgress)
           }
         } catch (err) {
-          sendToRenderer('export:transcribe-progress', {
-            label: `Captions failed: ${err instanceof Error ? err.message : String(err)}`,
-          })
+          onProgress(`Captions failed: ${err instanceof Error ? err.message : String(err)}`)
         }
       }
     }
 
     for (const job of jobs) {
-      await runJob(job, subtitleWords, args.subtitleStyle, args.bgStyle)
+      await runJob(job, subtitleWords, args.subtitleStyle, args.bgStyle, args.slamEffect ?? false, args.wobbleEffect ?? false)
     }
 
     return jobs.map((j) => j.id)
@@ -194,10 +193,13 @@ async function runJob(
   job: ExportJob,
   subtitleWords: WordTimestamp[] = [],
   subtitleStyle: StartExportArgs['subtitleStyle'] = 'standard',
-  bgStyle: StartExportArgs['bgStyle'] = 'slo-mo-bnw'
+  bgStyle: StartExportArgs['bgStyle'] = 'slo-mo-bnw',
+  slamEffect = false,
+  wobbleEffect = false,
 ): Promise<void> {
   const { preset, inputPath } = job
   const portrait = preset.height >= preset.width
+
   let srcSize = { w: 1920, h: 1080 }
   if (subtitleWords.length > 0) {
     srcSize = await probeVideoSize(inputPath)
@@ -206,11 +208,30 @@ async function runJob(
     ? buildSubtitleDrawtext(subtitleWords, preset, srcSize.w, srcSize.h, subtitleStyle ?? 'standard')
     : ''
 
+  const slamDir = slamEffect && portrait ? 'left' : undefined
+  const wobble = wobbleEffect && portrait
+
+  sendToRenderer('export:job-status', { jobId: job.id, status: 'processing' })
+  await runJobCore(job, job.outputPath, subtitleDrawtext, bgStyle, slamDir, wobble, true)
+}
+
+function runJobCore(
+  job: ExportJob,
+  outputPath: string,
+  subtitleDrawtext: string,
+  bgStyle: StartExportArgs['bgStyle'] = 'slo-mo-bnw',
+  slamDir?: 'left' | 'right',
+  wobble = false,
+  emitEvents = false,
+): Promise<void> {
   return new Promise((resolve) => {
-    const { outputPath, id: jobId, title, description } = job
+    const { preset, inputPath } = job
+    const portrait = preset.height >= preset.width
+    const effectiveBgStyle = bgStyle ?? 'slo-mo-bnw'
+
     const metadataOpts = [
-      '-metadata', `title=${title ?? ''}`,
-      '-metadata', `description=${description ?? ''}`,
+      '-metadata', `title=${job.title ?? ''}`,
+      '-metadata', `description=${job.description ?? ''}`,
     ]
     const compatOpts = [
       '-profile:v main',
@@ -219,19 +240,16 @@ async function runJob(
       '-vsync cfr',
     ]
 
-    sendToRenderer('export:job-status', { jobId, status: 'processing' })
-
     let cmd: ReturnType<typeof ffmpeg>
 
     if (portrait) {
-      const effectiveBgStyle = bgStyle ?? 'slo-mo-bnw'
       const { filterComplex, bgInput } = buildPortraitFilterComplex(
         preset,
         effectiveBgStyle,
-        subtitleDrawtext || undefined
+        subtitleDrawtext || undefined,
+        slamDir,
+        wobble,
       )
-      console.log('[vb] bgStyle:', effectiveBgStyle, '| bgInput:', bgInput)
-      console.log('[vb] filterComplex:', filterComplex)
       cmd = ffmpeg(inputPath)
       if (bgInput) {
         cmd = cmd.input(bgInput).inputOptions(['-loop', '1'])
@@ -256,15 +274,13 @@ async function runJob(
         `pad=${preset.width}:${preset.height}:(ow-iw)/2:(oh-ih)/2:black`,
       ]
       if (subtitleDrawtext) vfParts.push(subtitleDrawtext)
-      const vf = vfParts.join(',')
-
       cmd = ffmpeg(inputPath).outputOptions([
         `-c:v ${preset.codec}`,
         `-b:v ${preset.videoBitrate}`,
         '-c:a aac',
         `-b:a ${preset.audioBitrate}`,
         `-r ${preset.fps}`,
-        `-vf ${vf}`,
+        `-vf ${vfParts.join(',')}`,
         '-movflags +faststart',
         '-preset fast',
         ...compatOpts,
@@ -280,18 +296,23 @@ async function runJob(
 
     cmd
       .on('progress', (progress) => {
+        if (!emitEvents) return
         const pct = Math.min(Math.round(progress.percent ?? 0), 99)
-        sendToRenderer('export:progress', { jobId, progress: pct })
+        sendToRenderer('export:progress', { jobId: job.id, progress: pct })
       })
       .on('end', () => {
-        sendToRenderer('export:progress', { jobId, progress: 100 })
-        sendToRenderer('export:job-status', { jobId, status: 'done' })
-        sendToRenderer('export:job-done', { jobId, outputPath })
+        if (emitEvents) {
+          sendToRenderer('export:progress', { jobId: job.id, progress: 100 })
+          sendToRenderer('export:job-status', { jobId: job.id, status: 'done' })
+          sendToRenderer('export:job-done', { jobId: job.id, outputPath })
+        }
         resolve()
       })
       .on('error', (err) => {
-        sendToRenderer('export:job-status', { jobId, status: 'error' })
-        sendToRenderer('export:job-error', { jobId, error: err.message })
+        if (emitEvents) {
+          sendToRenderer('export:job-status', { jobId: job.id, status: 'error' })
+          sendToRenderer('export:job-error', { jobId: job.id, error: err.message })
+        }
         resolve()
       })
       .run()

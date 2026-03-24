@@ -35,3 +35,4 @@ export function getLicenceKey(): string {
 export function setLicenceKey(key: string): void {
   writeConfig({ ...readConfig(), licenceKey: key })
 }
+
