@@ -39,10 +39,15 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   getDesktopPath: () => ipcRenderer.invoke('app:desktopPath'),
+  getDownloadsPath: () => ipcRenderer.invoke('app:downloadsPath'),
+
+  getPodcastDir: () => ipcRenderer.invoke('app:podcastDir'),
 
   getApiKey: () => ipcRenderer.invoke('config:getApiKey'),
   setApiKey: (key: string) => ipcRenderer.invoke('config:setApiKey', key),
   getLicenceKey: () => ipcRenderer.invoke('config:getLicenceKey'),
+  getSavedOutputDir: () => ipcRenderer.invoke('config:getOutputDir'),
+  setSavedOutputDir: (dir: string) => ipcRenderer.invoke('config:setOutputDir', dir),
   isPackaged: () => ipcRenderer.invoke('app:isPackaged'),
   activateLicence: (key: string) => ipcRenderer.invoke('licence:activate', key),
 
@@ -58,8 +63,11 @@ contextBridge.exposeInMainWorld('api', {
   showItemInFolder: (path: string) =>
     ipcRenderer.invoke('shell:showItemInFolder', path),
 
-  downloadYoutube: (url: string) =>
-    ipcRenderer.invoke('youtube:download', url),
+  getYoutubeInfo: (url: string) =>
+    ipcRenderer.invoke('youtube:info', url),
+
+  downloadYoutube: (url: string, startSec?: number, endSec?: number) =>
+    ipcRenderer.invoke('youtube:download', { url, startSec, endSec }),
 
   onYoutubeProgress: (cb: (data: { label: string; percent: number }) => void) => {
     const handler = (_: unknown, data: { label: string; percent: number }) => cb(data)
@@ -69,9 +77,38 @@ contextBridge.exposeInMainWorld('api', {
 
   getTestVideoPath: (): Promise<string | null> => ipcRenderer.invoke('dev:getTestVideoPath'),
 
-  onUpdateAvailable: (cb: (data: { version: string; downloadUrl: string }) => void) => {
-    const handler = (_: unknown, data: { version: string; downloadUrl: string }) => cb(data)
+  fetchImageUrl: (url: string): Promise<string> => ipcRenderer.invoke('image:fetchUrl', url),
+
+  encodeMp4: (args: { frames: string[]; fps: number }): Promise<string> =>
+    ipcRenderer.invoke('image:encodeMp4', args),
+
+  saveAudioFile: (filename: string, buffer: ArrayBuffer): Promise<{ saved: boolean; filePath?: string }> =>
+    ipcRenderer.invoke('audio:save', { filename, buffer }),
+
+  onUpdateAvailable: (cb: (data: { version: string }) => void) => {
+    const handler = (_: unknown, data: { version: string }) => cb(data)
     ipcRenderer.on('app:update-available', handler)
     return () => ipcRenderer.removeListener('app:update-available', handler)
   },
+
+  onUpdateProgress: (cb: (data: { percent: number }) => void) => {
+    const handler = (_: unknown, data: { percent: number }) => cb(data)
+    ipcRenderer.on('app:update-progress', handler)
+    return () => ipcRenderer.removeListener('app:update-progress', handler)
+  },
+
+  onUpdateReady: (cb: (data: { version: string }) => void) => {
+    const handler = (_: unknown, data: { version: string }) => cb(data)
+    ipcRenderer.on('app:update-ready', handler)
+    return () => ipcRenderer.removeListener('app:update-ready', handler)
+  },
+
+  onUpdateError: (cb: (data: { message: string }) => void) => {
+    const handler = (_: unknown, data: { message: string }) => cb(data)
+    ipcRenderer.on('app:update-error', handler)
+    return () => ipcRenderer.removeListener('app:update-error', handler)
+  },
+
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  getReleasesUrl: () => ipcRenderer.invoke('update:releasesUrl'),
 })

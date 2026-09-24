@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 interface Config {
   openaiApiKey?: string
   licenceKey?: string
+  outputDir?: string
 }
 
 const configPath = join(app.getPath('userData'), 'vb-config.json')
@@ -36,3 +37,13 @@ export function setLicenceKey(key: string): void {
   writeConfig({ ...readConfig(), licenceKey: key })
 }
 
+
+// The user's chosen export folder. Sticky across sessions and across loading a
+// new video — once they've said where exports go, we don't second-guess it.
+export function getOutputDir(): string {
+  return readConfig().outputDir ?? ''
+}
+
+export function setOutputDir(dir: string): void {
+  writeConfig({ ...readConfig(), outputDir: dir })
+}

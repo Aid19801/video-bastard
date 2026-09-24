@@ -36,6 +36,9 @@ export interface StartExportArgs {
   outputDir: string
   title: string
   description: string
+  // Base name for the output file(s). When set, exports are named after this
+  // (e.g. the YouTube video title) instead of the input file's name.
+  fileBaseName?: string
   subtitles: boolean
   subtitleStyle?: SubtitleStyle
   bgStyle?: BgStyle

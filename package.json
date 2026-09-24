@@ -1,6 +1,6 @@
 {
   "name": "video-bastard",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Drag-and-drop video exporter for content creators",
   "main": "./out/main/index.js",
   "scripts": {
@@ -13,6 +13,8 @@
     "package:all": "electron-vite build && electron-builder --mac --win"
   },
   "dependencies": {
+    "@imgly/background-removal": "^1.7.0",
+    "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.3",
     "openai": "^6.32.0",
@@ -38,7 +40,7 @@
   "build": {
     "appId": "co.uk.funk-27.video-bastard",
     "productName": "Video Bastard",
-    "copyright": "Copyright © 2025 funk-27",
+    "copyright": "Copyright \u00a9 2025 funk-27",
     "asar": true,
     "asarUnpack": [
       "node_modules/ffmpeg-static/**",
@@ -52,9 +54,18 @@
           "**/*"
         ]
       },
-      { "from": "rainbow.jpg", "to": "backgrounds/rainbow.jpg" },
-      { "from": "scratchy_blue.jpg", "to": "backgrounds/scratchy_blue.jpg" },
-      { "from": "checks.jpg", "to": "backgrounds/checks.jpg" }
+      {
+        "from": "rainbow.jpg",
+        "to": "backgrounds/rainbow.jpg"
+      },
+      {
+        "from": "scratchy_blue.jpg",
+        "to": "backgrounds/scratchy_blue.jpg"
+      },
+      {
+        "from": "checks.jpg",
+        "to": "backgrounds/checks.jpg"
+      }
     ],
     "files": [
       "out/**/*",
@@ -78,9 +89,16 @@
             "x64",
             "arm64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
-      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "artifactName": "VideoBastard-${version}-${arch}.${ext}",
       "icon": "resources/icon.icns"
     },
     "dmg": {
@@ -95,7 +113,7 @@
           ]
         }
       ],
-      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "artifactName": "VideoBastard-Setup-${version}.${ext}",
       "icon": "resources/icon.ico"
     },
     "nsis": {
@@ -103,6 +121,13 @@
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "Video Bastard"
     },
-    "icon": "resources/icon"
+    "icon": "resources/icon",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Aid19801",
+        "repo": "video-bastard"
+      }
+    ]
   }
 }

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, IpcMain } from 'electron'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegStatic from 'ffmpeg-static'
-import { join, basename, extname } from 'path'
+import { join, basename, extname, dirname } from 'path'
 import { randomUUID } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
 import { PRESETS } from '../shared/presets'
@@ -35,10 +35,51 @@ function getBgImagePath(bgStyle: BgStyle): string | null {
   return join(__dirname, '../../', filename)
 }
 
-function getOutputPath(inputPath: string, presetId: string, outputDir: string): string {
-  const ext = extname(inputPath)
-  const name = basename(inputPath, ext)
-  return join(outputDir, `${name}_${presetId}.mp4`)
+// Strip characters that are illegal/awkward in filenames (YouTube titles are
+// full of :, |, / etc.) and cap the length.
+function sanitizeFilename(name: string): string {
+  return name.replace(/[/\\:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 150) || 'video'
+}
+
+// Compact wall-clock stamp, e.g. "20260720-143005".
+function timestampStr(): string {
+  const d = new Date()
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return (
+    `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}` +
+    `-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+  )
+}
+
+// If the desired path is already taken, append a timestamp (then a counter, if
+// even that collides) so downloading a different section of the same video
+// never overwrites — or, worse, silently reuses — the earlier file. Reusing a
+// name breaks tools like Premiere that relink by filename.
+function uniqueOutputPath(desired: string): string {
+  if (!existsSync(desired)) return desired
+  const dir = dirname(desired)
+  const ext = extname(desired)
+  const stem = basename(desired, ext)
+  const stamp = timestampStr()
+  let candidate = join(dir, `${stem}_${stamp}${ext}`)
+  let n = 2
+  while (existsSync(candidate)) {
+    candidate = join(dir, `${stem}_${stamp}_${n}${ext}`)
+    n++
+  }
+  return candidate
+}
+
+function getOutputPath(
+  inputPath: string,
+  presetId: string,
+  outputDir: string,
+  baseName?: string,
+  withSuffix = true,
+): string {
+  const name = baseName ? sanitizeFilename(baseName) : basename(inputPath, extname(inputPath))
+  const suffix = withSuffix ? `_${presetId}` : ''
+  return uniqueOutputPath(join(outputDir, `${name}${suffix}.mp4`))
 }
 
 function sendToRenderer(channel: string, data: unknown): void {
@@ -140,6 +181,10 @@ export function registerFFmpegHandlers(ipcMain: IpcMain): void {
     const { inputPath, presetIds, outputDir } = args
     const jobs: ExportJob[] = []
 
+    // With a single preset, name the file exactly after the base name; only add
+    // the preset suffix when several presets would otherwise collide.
+    const withSuffix = presetIds.length > 1
+
     for (const presetId of presetIds) {
       const preset = PRESETS.find((p) => p.id === presetId)
       if (!preset) continue
@@ -148,7 +193,7 @@ export function registerFFmpegHandlers(ipcMain: IpcMain): void {
         id: randomUUID(),
         inputPath,
         preset,
-        outputPath: getOutputPath(inputPath, presetId, outputDir),
+        outputPath: getOutputPath(inputPath, presetId, outputDir, args.fileBaseName, withSuffix),
         status: 'queued',
         progress: 0,
         title: args.title ? `${args.title} - ${preset.titleSuffix}` : '',

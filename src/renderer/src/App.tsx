@@ -7,6 +7,11 @@ import JobQueue from './components/JobQueue'
 import CompleteScreen from './components/CompleteScreen'
 import YoutubeInput from './components/YoutubeInput'
 import LicenceGate from './components/LicenceGate'
+import AudioEditor from './components/AudioEditor'
+import ScratchBuilder from './components/ScratchBuilder'
+import ImageStudio from './components/ImageStudio'
+
+type Tab = 'social-exports' | 'audio-editor' | 'scratch-builder' | 'images'
 
 declare global {
   interface Window {
@@ -18,6 +23,7 @@ declare global {
         outputDir: string
         title: string
         description: string
+        fileBaseName?: string
         subtitles: boolean
         subtitleStyle?: SubtitleStyle
         bgStyle?: BgStyle
@@ -28,6 +34,10 @@ declare global {
       }) => Promise<string[]>
       selectOutputDir: () => Promise<string | null>
       getDesktopPath: () => Promise<string>
+      getDownloadsPath: () => Promise<string>
+      getPodcastDir: () => Promise<string>
+      getSavedOutputDir: () => Promise<string>
+      setSavedOutputDir: (dir: string) => Promise<void>
       getApiKey: () => Promise<string>
       setApiKey: (key: string) => Promise<void>
       getLicenceKey: () => Promise<string>
@@ -41,30 +51,39 @@ declare global {
       onJobStatus: (cb: (data: { jobId: string; status: string }) => void) => () => void
       onJobDone: (cb: (data: { jobId: string; outputPath: string }) => void) => () => void
       onJobError: (cb: (data: { jobId: string; error: string }) => void) => () => void
-      downloadYoutube: (url: string) => Promise<{ path: string; title: string; description: string }>
+      getYoutubeInfo: (url: string) => Promise<{ duration: number; title: string }>
+      downloadYoutube: (url: string, startSec?: number, endSec?: number) => Promise<{ path: string; title: string; description: string }>
       onYoutubeProgress: (cb: (data: { label: string; percent: number }) => void) => () => void
       getTestVideoPath: () => Promise<string | null>
-      onUpdateAvailable: (cb: (data: { version: string; downloadUrl: string }) => void) => () => void
+      fetchImageUrl: (url: string) => Promise<string>
+      encodeMp4: (args: { frames: string[]; fps: number }) => Promise<string>
+      onUpdateAvailable: (cb: (data: { version: string }) => void) => () => void
+      onUpdateProgress: (cb: (data: { percent: number }) => void) => () => void
+      onUpdateReady: (cb: (data: { version: string }) => void) => () => void
+      onUpdateError: (cb: (data: { message: string }) => void) => () => void
+      installUpdate: () => Promise<void>
+      getReleasesUrl: () => Promise<string>
     }
   }
 }
 
-function dirFromPath(filePath: string): string {
-  return filePath.substring(0, filePath.lastIndexOf('/'))
+// Paths come from the main process, so they use the host separator: '/' on
+// macOS, '\\' on Windows. Split on either or these silently misbehave on Windows.
+function baseFromPath(filePath: string): string {
+  return filePath.split(/[/\\]/).pop() ?? ''
 }
 
 function stemFromPath(filePath: string): string {
-  const filename = filePath.split('/').pop() ?? ''
-  return filename.replace(/\.[^/.]+$/, '')
+  return baseFromPath(filePath).replace(/\.[^/.]+$/, '')
 }
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState<Tab>('social-exports')
   const [inputPath, setInputPath] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [selectedPresets, setSelectedPresets] = useState<Set<string>>(new Set())
   const [outputDir, setOutputDir] = useState<string | null>(null)
-  const [outputDirOverridden, setOutputDirOverridden] = useState(false)
   const [jobs, setJobs] = useState<ExportJob[]>([])
   const [isExporting, setIsExporting] = useState(false)
   const [allDone, setAllDone] = useState(false)
@@ -78,28 +97,55 @@ export default function App() {
   const [isPackaged, setIsPackaged] = useState(false)
   const [licenceKey, setLicenceKey] = useState<string | null>(null)
   const [licenceChecked, setLicenceChecked] = useState(false)
-  const [updateInfo, setUpdateInfo] = useState<{ version: string; downloadUrl: string } | null>(null)
+  const [updateInfo, setUpdateInfo] = useState<
+    { version: string; status: 'downloading' | 'ready'; percent: number } | null
+  >(null)
+  const [updateFailed, setUpdateFailed] = useState(false)
   const [slamEffect, setSlamEffect] = useState(false)
   const [wobbleEffect, setWobbleEffect] = useState(false)
 
-  const effectiveOutputDir = outputDir ?? (inputPath ? dirFromPath(inputPath) : null)
+  const [defaultOutputDir, setDefaultOutputDir] = useState<string | null>(null)
+
+  // Downloads on both macOS and Windows, unless the user has picked a folder.
+  const effectiveOutputDir = outputDir ?? defaultOutputDir
 
   useEffect(() => {
     Promise.all([
       window.api.getApiKey(),
       window.api.isPackaged(),
       window.api.getLicenceKey(),
-    ]).then(([key, packaged, licence]) => {
+      window.api.getSavedOutputDir(),
+      window.api.getDownloadsPath(),
+    ]).then(([key, packaged, licence, savedDir, downloads]) => {
       if (key) setApiKeyState(key)
       setIsPackaged(packaged)
       setLicenceKey(licence || null)
       setLicenceChecked(true)
+      setDefaultOutputDir(downloads)
+      // A folder the user picked in an earlier session wins over the default.
+      if (savedDir) {
+        setOutputDir(savedDir)
+      }
     })
   }, [])
 
   useEffect(() => {
     const unsubs = [
-      window.api.onUpdateAvailable((data) => setUpdateInfo(data)),
+      window.api.onUpdateAvailable(({ version }) =>
+        setUpdateInfo({ version, status: 'downloading', percent: 0 })
+      ),
+      window.api.onUpdateProgress(({ percent }) =>
+        setUpdateInfo((prev) => (prev ? { ...prev, percent } : prev))
+      ),
+      window.api.onUpdateReady(({ version }) =>
+        setUpdateInfo({ version, status: 'ready', percent: 100 })
+      ),
+      window.api.onUpdateError(() => {
+        // Fall back to the manual download link rather than leaving a banner
+        // stuck at "downloading" forever.
+        setUpdateInfo(null)
+        setUpdateFailed(true)
+      }),
       window.api.onYoutubeProgress((data) => setYtDownload(data)),
       window.api.onTranscribeProgress(({ label }) => setTranscribeLabel(label)),
       window.api.onJobsCreated((newJobs) => {
@@ -140,13 +186,14 @@ export default function App() {
     setInputPath(path)
     setTitle(stem)
     setDescription(`Type description here for ${stem}`)
-    setOutputDir(null)
-    setOutputDirOverridden(false)
   }, [])
 
   const handleSelectOutputDir = useCallback(async () => {
     const dir = await window.api.selectOutputDir()
-    if (dir) setOutputDir(dir)
+    if (!dir) return
+    setOutputDir(dir)
+    // Remember it for future videos and future sessions.
+    void window.api.setSavedOutputDir(dir)
   }, [])
 
   const handleExport = useCallback(async () => {
@@ -162,6 +209,7 @@ export default function App() {
       outputDir: effectiveOutputDir,
       title,
       description,
+      fileBaseName: title,
       subtitles,
       subtitleStyle,
       bgStyle,
@@ -180,8 +228,8 @@ export default function App() {
     setIsExporting(false)
     setAllDone(false)
     setSelectedPresets(new Set())
-    setOutputDir(null)
-    setOutputDirOverridden(false)
+    // Deliberately keeps outputDir — "change video" should not silently throw
+    // away where the user said exports go.
     setYtDownload(null)
     setYtError(null)
     setTranscribeLabel(null)
@@ -198,16 +246,14 @@ export default function App() {
     setDescription('Dev mode test description.')
   }, [handleFile])
 
-  const handleYoutubeDownload = useCallback(async (url: string) => {
+  const handleYoutubeDownload = useCallback(async (url: string, startSec?: number, endSec?: number) => {
     setYtError(null)
     setYtDownload({ label: 'Starting…', percent: 0 })
     try {
-      const result = await window.api.downloadYoutube(url)
-      const desktop = await window.api.getDesktopPath()
+      const result = await window.api.downloadYoutube(url, startSec, endSec)
       setYtDownload(null)
       setTitle(result.title)
       setDescription(result.description.slice(0, 220))
-      setOutputDir(desktop)
       setInputPath(result.path)
     } catch (err) {
       setYtDownload(null)
@@ -238,11 +284,31 @@ export default function App() {
     <div className="app">
       {updateInfo && (
         <div className="update-banner">
-          <span>Version <strong>{updateInfo.version}</strong> is available.</span>
-          <button className="update-banner-link" onClick={() => window.api.openExternal(updateInfo.downloadUrl)}>
-            Download update
-          </button>
+          {updateInfo.status === 'downloading' ? (
+            <span>
+              Downloading version <strong>{updateInfo.version}</strong>… {updateInfo.percent}%
+            </span>
+          ) : (
+            <>
+              <span>Version <strong>{updateInfo.version}</strong> is ready to install.</span>
+              <button className="update-banner-link" onClick={() => void window.api.installUpdate()}>
+                Restart &amp; install
+              </button>
+            </>
+          )}
           <button className="update-banner-dismiss" onClick={() => setUpdateInfo(null)}>✕</button>
+        </div>
+      )}
+      {updateFailed && (
+        <div className="update-banner">
+          <span>Couldn&apos;t check for updates.</span>
+          <button
+            className="update-banner-link"
+            onClick={async () => window.api.openExternal(await window.api.getReleasesUrl())}
+          >
+            Check manually
+          </button>
+          <button className="update-banner-dismiss" onClick={() => setUpdateFailed(false)}>✕</button>
         </div>
       )}
       <header className="app-header">
@@ -255,7 +321,38 @@ export default function App() {
         )}
       </header>
 
-      <main className="app-main">
+      <nav className="app-tabs">
+        <button
+          className={`app-tab ${activeTab === 'social-exports' ? 'app-tab--active' : ''}`}
+          onClick={() => setActiveTab('social-exports')}
+        >
+          Social Exports
+        </button>
+        <button
+          className={`app-tab ${activeTab === 'audio-editor' ? 'app-tab--active' : ''}`}
+          onClick={() => setActiveTab('audio-editor')}
+        >
+          Audio Editor
+        </button>
+        <button
+          className={`app-tab ${activeTab === 'scratch-builder' ? 'app-tab--active' : ''}`}
+          onClick={() => setActiveTab('scratch-builder')}
+        >
+          Scratch Builder
+        </button>
+        <button
+          className={`app-tab ${activeTab === 'images' ? 'app-tab--active' : ''}`}
+          onClick={() => setActiveTab('images')}
+        >
+          Images
+        </button>
+      </nav>
+
+      {activeTab === 'audio-editor' && <AudioEditor />}
+      {activeTab === 'scratch-builder' && <ScratchBuilder />}
+      {activeTab === 'images' && <ImageStudio />}
+
+      <main className="app-main" style={{ display: activeTab === 'social-exports' ? undefined : 'none' }}>
         {!inputPath && ytDownload && (
           <div className="yt-downloading">
             <p className="yt-downloading-label">{ytDownload.label}</p>
@@ -280,9 +377,9 @@ export default function App() {
             <span className="meta-label">video</span>
             <div className="file-info">
               <span className="file-icon">🎬</span>
-              <span className="file-name">{inputPath.split('/').pop()}</span>
+              <span className="file-name">{baseFromPath(inputPath)}</span>
               {!isExporting && (
-                <button className="btn-ghost" onClick={handleReset}>Change</button>
+                <button className="btn-ghost" onClick={handleReset}>Change video</button>
               )}
             </div>
           </div>
@@ -413,7 +510,7 @@ export default function App() {
                 <button className="output-dir-btn" onClick={handleSelectOutputDir}>
                   <span className="output-dir-icon">📁</span>
                   <span className="output-dir-path">
-                    {outputDir ?? 'Same folder as source'}
+                    {effectiveOutputDir ?? 'Downloads'}
                   </span>
                   <span className="output-dir-change">Change</span>
                 </button>
@@ -436,6 +533,7 @@ export default function App() {
         {jobs.length > 0 && isExporting && (
           <JobQueue jobs={jobs} onReset={handleReset} isExporting={isExporting} />
         )}
+
       </main>
 
       <button className="funk-brand" onClick={() => window.api.openExternal('https://funk-27.co.uk')}>
