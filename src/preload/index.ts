@@ -51,6 +51,10 @@ contextBridge.exposeInMainWorld('api', {
   isPackaged: () => ipcRenderer.invoke('app:isPackaged'),
   activateLicence: (key: string) => ipcRenderer.invoke('licence:activate', key),
 
+  getAuthState: () => ipcRenderer.invoke('auth:state'),
+  login: (email: string, password: string) => ipcRenderer.invoke('auth:login', email, password),
+  logout: () => ipcRenderer.invoke('auth:logout'),
+
   onTranscribeProgress: (cb: (data: { label: string }) => void) => {
     const handler = (_: unknown, data: { label: string }) => cb(data)
     ipcRenderer.on('export:transcribe-progress', handler)
@@ -69,8 +73,8 @@ contextBridge.exposeInMainWorld('api', {
   downloadYoutube: (url: string, startSec?: number, endSec?: number) =>
     ipcRenderer.invoke('youtube:download', { url, startSec, endSec }),
 
-  onYoutubeProgress: (cb: (data: { label: string; percent: number }) => void) => {
-    const handler = (_: unknown, data: { label: string; percent: number }) => cb(data)
+  onYoutubeProgress: (cb: (data: { label: string; percent: number; indeterminate?: boolean }) => void) => {
+    const handler = (_: unknown, data: { label: string; percent: number; indeterminate?: boolean }) => cb(data)
     ipcRenderer.on('youtube:progress', handler)
     return () => ipcRenderer.removeListener('youtube:progress', handler)
   },
@@ -108,6 +112,11 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('app:update-error', handler)
     return () => ipcRenderer.removeListener('app:update-error', handler)
   },
+
+  getDashboardStats: () => ipcRenderer.invoke('stats:get'),
+  getContentIdeas: () => ipcRenderer.invoke('stats:ideas'),
+  getDashboardSettings: () => ipcRenderer.invoke('stats:getSettings'),
+  setDashboardSettings: (s: unknown) => ipcRenderer.invoke('stats:setSettings', s),
 
   installUpdate: () => ipcRenderer.invoke('update:install'),
   getReleasesUrl: () => ipcRenderer.invoke('update:releasesUrl'),

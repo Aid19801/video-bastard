@@ -61,7 +61,7 @@ export async function transcribeVideo(
   }
 }
 
-const FUNK_API_URL = process.env['FUNK_API_URL'] || 'https://funk-api-afd30b1f0bb5.herokuapp.com'
+export const FUNK_API_URL = process.env['FUNK_API_URL'] || 'https://funk-api-afd30b1f0bb5.herokuapp.com'
 
 // Transcribe via funk-api (validates licence + calls Whisper server-side)
 export async function transcribeViaWorker(

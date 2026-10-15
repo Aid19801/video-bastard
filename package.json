@@ -1,10 +1,10 @@
 {
   "name": "video-bastard",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Drag-and-drop video exporter for content creators",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "env -u ELECTRON_RUN_AS_NODE electron-vite dev",
+    "dev": "env -u ELECTRON_RUN_AS_NODE electron-vite dev --watch",
     "build": "electron-vite build",
     "preview": "env -u ELECTRON_RUN_AS_NODE electron-vite preview",
     "package": "electron-vite build && electron-builder",
@@ -40,7 +40,7 @@
   "build": {
     "appId": "co.uk.funk-27.video-bastard",
     "productName": "Video Bastard",
-    "copyright": "Copyright \u00a9 2025 funk-27",
+    "copyright": "Copyright © 2025 funk-27",
     "asar": true,
     "asarUnpack": [
       "node_modules/ffmpeg-static/**",

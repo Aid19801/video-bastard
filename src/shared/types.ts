@@ -62,3 +62,82 @@ export interface JobErrorEvent {
   jobId: string
   error: string
 }
+
+// ── Content dashboard ────────────────────────────────────────────────────────
+
+export interface VideoStat {
+  id: string
+  title: string
+  url: string
+  thumbnail: string
+  publishedAt: string
+  views: number
+  likes: number
+  comments?: number // only with a YouTube API key
+  viewsPerDay: number
+}
+
+export interface ChannelStat {
+  handle: string
+  id: string
+  title: string
+  url: string
+  subscribers?: number // only with a YouTube API key
+  totalViews?: number
+  videoCount?: number
+  recent: VideoStat[] // newest first, up to 15
+  // Change since the snapshot closest to 24h ago; absent on first run.
+  viewsGained24h?: number
+  subsGained24h?: number
+  error?: string
+}
+
+export interface PodcastEpisode {
+  title: string
+  publishedAt: string
+  durationSec?: number
+  url?: string
+}
+
+export interface PodcastStat {
+  title: string
+  episodeCount: number
+  lastPublishedAt?: string
+  avgGapDays?: number
+  episodes: PodcastEpisode[] // newest first
+  error?: string
+}
+
+export interface DashboardStats {
+  fetchedAt: string
+  hasYoutubeKey: boolean
+  channels: ChannelStat[]
+  podcast: PodcastStat | null // null when no feed URL is configured
+}
+
+export interface DashboardSettings {
+  channelHandles: string[]
+  pinecastFeedUrl: string
+  youtubeApiKey: string
+}
+
+export interface PastIdea {
+  id: string
+  title: string
+  url: string
+  views: number
+  channelTitle: string
+  description: string
+}
+
+export interface IdeasResult {
+  ideas: PastIdea[] // up to 3, randomly drawn from each channel's top quartile
+  topics?: string[] // AI-distilled broad topic per idea, same order; absent without an OpenAI key
+  topicsError?: string
+}
+
+// funk-27 account gate. Only 'ok' (logged in + verified) unlocks the app.
+export type AuthState =
+  | { status: 'logged-out'; error?: string }
+  | { status: 'unverified'; email: string }
+  | { status: 'ok'; email: string }

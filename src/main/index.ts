@@ -4,6 +4,7 @@ const { autoUpdater } = electronUpdater
 import { writeFile } from 'fs/promises'
 import { getApiKey, setApiKey, getLicenceKey, setLicenceKey, getOutputDir, setOutputDir } from './config'
 import { activateLicence, WORKER_URL } from './subtitles'
+import { registerAuthHandlers } from './auth'
 import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 
@@ -50,6 +51,7 @@ const GITHUB_RELEASES_URL = 'https://github.com/Aid19801/video-bastard/releases'
 import { registerFFmpegHandlers } from './ffmpeg'
 import { registerYoutubeHandlers } from './youtube'
 import { registerImageFxHandlers } from './imagefx'
+import { registerStatsHandlers } from './stats'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -87,6 +89,8 @@ app.whenReady().then(() => {
   registerFFmpegHandlers(ipcMain)
   registerYoutubeHandlers(ipcMain)
   registerImageFxHandlers(ipcMain)
+  registerStatsHandlers(ipcMain)
+  registerAuthHandlers(ipcMain)
 
   // Restart into the staged update. quitAndInstall closes every window, so the
   // renderer must only call this once the download has finished.

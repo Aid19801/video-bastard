@@ -1,17 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PRESETS } from '../../shared/presets'
-import type { ExportJob, SubtitleStyle, BgStyle } from '../../shared/types'
-import DropZone from './components/DropZone'
+import type { ExportJob, SubtitleStyle, BgStyle, DashboardStats, DashboardSettings, IdeasResult, AuthState } from '../../shared/types'
 import ServicePicker from './components/ServicePicker'
 import JobQueue from './components/JobQueue'
 import CompleteScreen from './components/CompleteScreen'
 import YoutubeInput from './components/YoutubeInput'
 import LicenceGate from './components/LicenceGate'
+import LoginGate from './components/LoginGate'
 import AudioEditor from './components/AudioEditor'
 import ScratchBuilder from './components/ScratchBuilder'
 import ImageStudio from './components/ImageStudio'
+import Dashboard from './components/Dashboard'
 
-type Tab = 'social-exports' | 'audio-editor' | 'scratch-builder' | 'images'
+type Tab = 'social-exports' | 'my-channels' | 'audio-editor' | 'scratch-builder' | 'images'
 
 declare global {
   interface Window {
@@ -51,9 +52,9 @@ declare global {
       onJobStatus: (cb: (data: { jobId: string; status: string }) => void) => () => void
       onJobDone: (cb: (data: { jobId: string; outputPath: string }) => void) => () => void
       onJobError: (cb: (data: { jobId: string; error: string }) => void) => () => void
-      getYoutubeInfo: (url: string) => Promise<{ duration: number; title: string }>
+      getYoutubeInfo: (url: string) => Promise<{ duration: number; title: string; thumbnail: string }>
       downloadYoutube: (url: string, startSec?: number, endSec?: number) => Promise<{ path: string; title: string; description: string }>
-      onYoutubeProgress: (cb: (data: { label: string; percent: number }) => void) => () => void
+      onYoutubeProgress: (cb: (data: { label: string; percent: number; indeterminate?: boolean }) => void) => () => void
       getTestVideoPath: () => Promise<string | null>
       fetchImageUrl: (url: string) => Promise<string>
       encodeMp4: (args: { frames: string[]; fps: number }) => Promise<string>
@@ -62,7 +63,14 @@ declare global {
       onUpdateReady: (cb: (data: { version: string }) => void) => () => void
       onUpdateError: (cb: (data: { message: string }) => void) => () => void
       installUpdate: () => Promise<void>
+      getDashboardStats: () => Promise<DashboardStats>
+      getDashboardSettings: () => Promise<DashboardSettings>
+      getContentIdeas: () => Promise<IdeasResult>
+      setDashboardSettings: (s: DashboardSettings) => Promise<void>
       getReleasesUrl: () => Promise<string>
+      getAuthState: () => Promise<AuthState>
+      login: (email: string, password: string) => Promise<AuthState>
+      logout: () => Promise<void>
     }
   }
 }
@@ -87,7 +95,7 @@ export default function App() {
   const [jobs, setJobs] = useState<ExportJob[]>([])
   const [isExporting, setIsExporting] = useState(false)
   const [allDone, setAllDone] = useState(false)
-  const [ytDownload, setYtDownload] = useState<{ label: string; percent: number } | null>(null)
+  const [ytDownload, setYtDownload] = useState<{ label: string; percent: number; indeterminate?: boolean } | null>(null)
   const [ytError, setYtError] = useState<string | null>(null)
   const [subtitles, setSubtitles] = useState(false)
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>('standard')
@@ -97,6 +105,7 @@ export default function App() {
   const [isPackaged, setIsPackaged] = useState(false)
   const [licenceKey, setLicenceKey] = useState<string | null>(null)
   const [licenceChecked, setLicenceChecked] = useState(false)
+  const [auth, setAuth] = useState<AuthState | null>(null)
   const [updateInfo, setUpdateInfo] = useState<
     { version: string; status: 'downloading' | 'ready'; percent: number } | null
   >(null)
@@ -108,6 +117,10 @@ export default function App() {
 
   // Downloads on both macOS and Windows, unless the user has picked a folder.
   const effectiveOutputDir = outputDir ?? defaultOutputDir
+
+  useEffect(() => {
+    void window.api.getAuthState().then(setAuth)
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -186,6 +199,7 @@ export default function App() {
     setInputPath(path)
     setTitle(stem)
     setDescription(`Type description here for ${stem}`)
+    setSelectedPresets(new Set(['youtube']))
   }, [])
 
   const handleSelectOutputDir = useCallback(async () => {
@@ -248,13 +262,15 @@ export default function App() {
 
   const handleYoutubeDownload = useCallback(async (url: string, startSec?: number, endSec?: number) => {
     setYtError(null)
-    setYtDownload({ label: 'Starting…', percent: 0 })
+    setYtDownload({ label: 'Starting…', percent: 0, indeterminate: true })
     try {
       const result = await window.api.downloadYoutube(url, startSec, endSec)
       setYtDownload(null)
       setTitle(result.title)
       setDescription(result.description.slice(0, 220))
       setInputPath(result.path)
+      // Default to the landscape YouTube export; the user can add others.
+      setSelectedPresets(new Set(['youtube']))
     } catch (err) {
       setYtDownload(null)
       setYtError(err instanceof Error ? err.message : String(err) || 'Download failed')
@@ -266,7 +282,11 @@ export default function App() {
   const PORTRAIT_PRESET_IDS = ['tiktok', 'instagram-feed', 'instagram-story', 'bluesky']
   const hasPortraitSelected = PORTRAIT_PRESET_IDS.some((id) => selectedPresets.has(id))
 
-  if (!licenceChecked) return null
+  if (!licenceChecked || !auth) return null
+
+  if (auth.status !== 'ok') {
+    return <LoginGate state={auth} onChange={setAuth} />
+  }
 
   if (isPackaged && !licenceKey) {
     return (
@@ -314,6 +334,20 @@ export default function App() {
       <header className="app-header">
         <h1>Video Bastard</h1>
         <p className="app-tagline">Drop your video. Pick your platforms. Done.</p>
+        {auth.email && (
+          <div className="app-account">
+            <span>{auth.email}</span>
+            <button
+              className="btn-ghost"
+              onClick={async () => {
+                await window.api.logout()
+                setAuth({ status: 'logged-out' })
+              }}
+            >
+              Log out
+            </button>
+          </div>
+        )}
         {!isPackaged && (
           <button className="dev-menu-btn" onClick={handleDevLoad}>
             ⚙ populate with test vid
@@ -327,6 +361,12 @@ export default function App() {
           onClick={() => setActiveTab('social-exports')}
         >
           Social Exports
+        </button>
+        <button
+          className={`app-tab ${activeTab === 'my-channels' ? 'app-tab--active' : ''}`}
+          onClick={() => setActiveTab('my-channels')}
+        >
+          My Channels
         </button>
         <button
           className={`app-tab ${activeTab === 'audio-editor' ? 'app-tab--active' : ''}`}
@@ -348,6 +388,11 @@ export default function App() {
         </button>
       </nav>
 
+      {activeTab === 'my-channels' && (
+        <main className="app-main">
+          <Dashboard />
+        </main>
+      )}
       {activeTab === 'audio-editor' && <AudioEditor />}
       {activeTab === 'scratch-builder' && <ScratchBuilder />}
       {activeTab === 'images' && <ImageStudio />}
@@ -357,16 +402,19 @@ export default function App() {
           <div className="yt-downloading">
             <p className="yt-downloading-label">{ytDownload.label}</p>
             <div className="yt-progress-track">
-              <div className="yt-progress-fill" style={{ width: `${ytDownload.percent}%` }} />
+              <div
+                className={`yt-progress-fill${ytDownload.indeterminate ? ' is-indeterminate' : ''}`}
+                style={ytDownload.indeterminate ? undefined : { width: `${ytDownload.percent}%` }}
+              />
             </div>
-            <p className="yt-downloading-pct">{ytDownload.percent}%</p>
+            <p className="yt-downloading-pct">
+              {ytDownload.indeterminate ? 'working…' : `${ytDownload.percent}%`}
+            </p>
           </div>
         )}
 
         {!inputPath && !ytDownload && (
           <>
-            <DropZone onFile={handleFile} />
-            <div className="yt-divider"><span>or</span></div>
             <YoutubeInput onDownload={handleYoutubeDownload} />
             {ytError && <p className="yt-error">{ytError}</p>}
           </>

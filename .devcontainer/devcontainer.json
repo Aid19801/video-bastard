@@ -1,0 +1,15 @@
+{
+  "name": "video-bastard",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:24",
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+  },
+  "mounts": [
+    // keep Claude's login/settings across rebuilds
+    "source=claude-config,target=/home/node/.claude,type=volume",
+    // Linux node_modules, separate from your Mac's (and much faster)
+    "source=vb-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
+  ],
+  "postCreateCommand": "sudo chown node node_modules /home/node/.claude && npm install",
+  "remoteUser": "node"
+}

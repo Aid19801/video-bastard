@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { FaYoutube } from 'react-icons/fa'
+import { FaXTwitter } from 'react-icons/fa6'
 
 interface Props {
   onDownload: (url: string, startSec?: number, endSec?: number) => void
@@ -9,13 +10,25 @@ interface Props {
 // on each side (so a 40s clip total).
 const CLIP_HALF_SECONDS = 20
 
-function isValidYoutubeUrl(url: string): boolean {
-  return /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)[\w-]+/.test(url.trim())
+type Platform = 'youtube' | 'twitter'
+
+const YOUTUBE_RE = /^(https?:\/\/)?(www\.|m\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)[\w-]+/
+// x.com/<user>/status/<id>, twitter.com/…, mobile.twitter.com/…, x.com/i/status/<id>
+const TWITTER_RE = /^(https?:\/\/)?(www\.|mobile\.)?(twitter|x)\.com\/(\w+|i(\/web)?)\/status\/\d+/i
+
+// Which site a URL points at, or null if it's neither.
+function detectPlatform(url: string): Platform | null {
+  const t = url.trim()
+  if (YOUTUBE_RE.test(t)) return 'youtube'
+  if (TWITTER_RE.test(t)) return 'twitter'
+  return null
 }
 
 // Pull a start moment out of a YouTube URL's t= / start= param.
 // Handles t=31, t=31s, t=1m30s, t=1h2m3s, and #t=… hash form.
 function parseUrlTimestamp(url: string): number | null {
+  // X share links carry an unrelated t= tracking token — not a timestamp.
+  if (detectPlatform(url) !== 'youtube') return null
   const m = url.match(/[?&#](?:t|start)=([^&#]+)/)
   if (!m) return null
   const v = m[1]
@@ -33,8 +46,10 @@ function parseUrlTimestamp(url: string): number | null {
 
 // Identify the video a URL points at, so we can tell when it changes.
 function parseVideoId(url: string): string | null {
-  const m = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]+)/)
-  return m ? m[1] : null
+  const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]+)/)
+  if (yt) return yt[1]
+  const tw = url.match(/(?:twitter|x)\.com\/[\w/]+?\/status\/(\d+)/i)
+  return tw ? `x:${tw[1]}` : null
 }
 
 // Accepts "SS", "M:SS", "H:MM:SS", each with optional decimal seconds.
@@ -140,6 +155,7 @@ export default function YoutubeInput({ onDownload }: Props) {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [duration, setDuration] = useState<number | null>(null)
+  const [preview, setPreview] = useState<{ title: string; thumbnail: string } | null>(null)
   const [infoLoading, setInfoLoading] = useState(false)
 
   // A different video was pasted → nuke everything so nothing carries over.
@@ -150,6 +166,7 @@ export default function YoutubeInput({ onDownload }: Props) {
     setFrom('')
     setTo('')
     setDuration(null)
+    setPreview(null)
   }, [videoId])
 
   // When the URL's timestamp changes, centre a 40s clip on it. Keyed on the
@@ -166,8 +183,9 @@ export default function YoutubeInput({ onDownload }: Props) {
   // back silently to the text fields if the lookup fails.
   useEffect(() => {
     const trimmed = url.trim()
-    if (!isValidYoutubeUrl(trimmed)) {
+    if (!detectPlatform(trimmed)) {
       setDuration(null)
+      setPreview(null)
       setInfoLoading(false)
       return
     }
@@ -176,9 +194,15 @@ export default function YoutubeInput({ onDownload }: Props) {
     const handle = setTimeout(async () => {
       try {
         const info = await window.api.getYoutubeInfo(trimmed)
-        if (!cancelled) setDuration(info.duration > 0 ? info.duration : null)
+        if (!cancelled) {
+          setDuration(info.duration > 0 ? info.duration : null)
+          setPreview(info.title ? { title: info.title, thumbnail: info.thumbnail } : null)
+        }
       } catch {
-        if (!cancelled) setDuration(null)
+        if (!cancelled) {
+          setDuration(null)
+          setPreview(null)
+        }
       } finally {
         if (!cancelled) setInfoLoading(false)
       }
@@ -189,34 +213,35 @@ export default function YoutubeInput({ onDownload }: Props) {
     }
   }, [url])
 
-  const invalidUrl = url.length > 0 && !isValidYoutubeUrl(url)
+  const platform = detectPlatform(url)
+  const invalidUrl = url.trim().length > 0 && !platform
 
   const fromSec = parseTime(from)
   const toSec = parseTime(to)
   const fromBad = from.trim().length > 0 && fromSec === null
   const toBad = to.trim().length > 0 && toSec === null
 
-  // A trim is "set" if either field has content. It's valid only when both
-  // parse and to > from.
-  const trimStarted = from.trim().length > 0 || to.trim().length > 0
-  const trimComplete = fromSec !== null && toSec !== null
-  const trimValid = trimComplete && (toSec as number) > (fromSec as number)
-  const rangeError = trimStarted && !fromBad && !toBad && trimComplete && !trimValid
+  // The default is the whole video: an empty "from" means the start, an empty
+  // "to" means the end. So a lone "to" clips from 0:00, a lone "from" runs to
+  // the end. endSec stays null when "to" is empty and the duration is unknown —
+  // the download then runs to the end of the video.
+  const startSec = fromSec ?? 0
+  const endSec = toSec ?? duration
+  const rangeError = !fromBad && !toBad && endSec !== null && endSec <= startSec
+  // Within a second of the end counts as the end — dragged/typed times are
+  // whole seconds, so the true duration is rarely hit exactly.
+  const isFullVideo = startSec === 0 && (toSec === null || (duration !== null && toSec >= duration - 1))
 
-  const clipLength = trimValid ? (toSec as number) - (fromSec as number) : null
+  const clipLength = endSec !== null && !rangeError ? endSec - startSec : null
 
-  const canGo =
-    isValidYoutubeUrl(url) &&
-    !fromBad &&
-    !toBad &&
-    (!trimStarted || trimValid)
+  const canGo = platform !== null && !fromBad && !toBad && !rangeError
 
   const handleSubmit = () => {
     if (!canGo) return
-    if (trimValid) {
-      onDownload(url.trim(), fromSec as number, toSec as number)
-    } else {
+    if (isFullVideo) {
       onDownload(url.trim())
+    } else {
+      onDownload(url.trim(), startSec, endSec ?? undefined)
     }
   }
 
@@ -230,11 +255,15 @@ export default function YoutubeInput({ onDownload }: Props) {
   return (
     <div className="yt-input-wrap">
       <div className="yt-input-row">
-        <FaYoutube className="yt-icon" />
+        {platform === 'twitter' ? (
+          <FaXTwitter className="yt-icon yt-icon--x" />
+        ) : (
+          <FaYoutube className="yt-icon" />
+        )}
         <input
           className={`yt-input ${invalidUrl ? 'yt-input--invalid' : ''}`}
           type="url"
-          placeholder="Paste a YouTube URL…"
+          placeholder="Paste a YouTube or X URL…"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
@@ -246,8 +275,20 @@ export default function YoutubeInput({ onDownload }: Props) {
 
       {infoLoading && !duration && (
         <p className="yt-trim-hint">
-          <span className="transcribe-spinner" /> Loading video…
+          <span className="transcribe-spinner" /> Looking up video…
         </p>
+      )}
+
+      {preview && (
+        <div className="yt-preview">
+          {preview.thumbnail && <img className="yt-preview-thumb" src={preview.thumbnail} alt="" />}
+          <div className="yt-preview-text">
+            <span className="yt-preview-title">{preview.title}</span>
+            {duration !== null && (
+              <span className="yt-preview-duration">{formatDuration(duration)}</span>
+            )}
+          </div>
+        </div>
       )}
 
       {duration !== null && (
@@ -267,7 +308,7 @@ export default function YoutubeInput({ onDownload }: Props) {
         <input
           className={`yt-trim-input ${fromBad ? 'yt-input--invalid' : ''}`}
           type="text"
-          placeholder="from  e.g. 3:37"
+          placeholder="from  0:00"
           value={from}
           onChange={(e) => setFrom(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
@@ -276,7 +317,7 @@ export default function YoutubeInput({ onDownload }: Props) {
         <input
           className={`yt-trim-input ${toBad || rangeError ? 'yt-input--invalid' : ''}`}
           type="text"
-          placeholder="to  e.g. 3:59"
+          placeholder={`to  ${duration !== null ? formatDuration(duration) : 'end'}`}
           value={to}
           onChange={(e) => setTo(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
@@ -286,7 +327,7 @@ export default function YoutubeInput({ onDownload }: Props) {
         )}
       </div>
 
-      {invalidUrl && <p className="yt-invalid">Doesn't look like a valid YouTube URL</p>}
+      {invalidUrl && <p className="yt-invalid">Doesn't look like a YouTube or X video URL</p>}
       {(fromBad || toBad) && (
         <p className="yt-invalid">Use seconds or a M:SS / H:MM:SS timestamp</p>
       )}
